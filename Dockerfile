@@ -1,5 +1,5 @@
-# Use PHP 8.2 with Apache
-FROM php:8.2-apache
+# Use PHP 8.4 with Apache
+FROM php:8.4-apache
 
 # Install PostgreSQL client libraries and required PHP extensions
 RUN apt-get update && apt-get install -y \
