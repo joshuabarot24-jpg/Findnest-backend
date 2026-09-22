@@ -12,6 +12,11 @@ class ContentModerationService
     public function __construct()
     {
         $this->apiKey = env('GEMINI_API_KEY');
+
+        // Dynamically reads GEMINI_MODEL from Render env, falling back to gemini-2.5-flash
+        $model = env('GEMINI_MODEL', 'gemini-2.5-flash');
+
+        $this->apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/%7B$model%7D:generateContent";
     }
 
     public function checkImage(string $imageUrl): array
