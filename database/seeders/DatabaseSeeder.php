@@ -1,0 +1,185 @@
+<?php
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+
+class DatabaseSeeder extends Seeder {
+    public function run(): void {
+
+       DB::table('users')->insert([
+            [
+                'name' => 'Super Admin',
+                'email' => 'superadmin@findnest.com',
+                'password' => Hash::make('Findnest2026!'),
+                'role' => 'super_admin',
+                'school_id' => null,
+                'course' => null,
+                'year_level' => null,
+                'is_active' => true,
+                'trust_score' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Ms. Shelly S. Durban',
+                'email' => 'admin@findnest.com',
+                'password' => Hash::make('Findnest2026!'),
+                'role' => 'admin',
+                'school_id' => null,
+                'course' => null,
+                'year_level' => null,
+                'is_active' => true,
+                'trust_score' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Raymart D. Chabas',
+                'email' => 'raymart.chabas@sjdmcci.edu.ph',
+                'password' => Hash::make('Student2026!'),
+                'role' => 'student',
+                'school_id' => '2022-10043',
+                'course' => 'BS Information Technology',
+                'year_level' => '4th Year',
+                'is_active' => true,
+                'trust_score' => 95,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Juan Dela Cruz',
+                'email' => 'juan.delacruz@sjdmcci.edu.ph',
+                'password' => Hash::make('Student2026!'),
+                'role' => 'student',
+                'school_id' => '2024-30015',
+                'course' => 'BS Information Technology',
+                'year_level' => '2nd Year',
+                'is_active' => true,
+                'trust_score' => 88,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Maria Santos',
+                'email' => 'maria.santos@sjdmcci.edu.ph',
+                'password' => Hash::make('Student2026!'),
+                'role' => 'student',
+                'school_id' => '2023-20021',
+                'course' => 'BS Accountancy',
+                'year_level' => '3rd Year',
+                'is_active' => true,
+                'trust_score' => 72,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('lost_item_reports')->insert([
+            [
+                'user_id' => 3,
+                'item_name' => 'Blue Umbrella',
+                'category' => 'Personal Belongings',
+                'description' => 'Blue umbrella with black handle, small size',
+                'location_lost' => 'Main Entrance',
+                'date_lost' => '2026-07-01',
+                'photo_url' => null,
+                'status' => 'returned',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'user_id' => 4,
+                'item_name' => 'iPhone 15 Pro Max',
+                'category' => 'Electronics',
+                'description' => 'White iPhone 15 Pro Max with cracked screen top-left',
+                'location_lost' => 'Classroom 201',
+                'date_lost' => '2026-07-09',
+                'photo_url' => null,
+                'status' => 'searching',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'user_id' => 5,
+                'item_name' => 'Black Wallet',
+                'category' => 'Personal Belongings',
+                'description' => 'Black leather wallet with student ID inside',
+                'location_lost' => 'Canteen',
+                'date_lost' => '2026-07-02',
+                'photo_url' => null,
+                'status' => 'searching',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('found_item_records')->insert([
+            [
+                'admin_id' => 2,
+                'item_name' => 'Blue Umbrella',
+                'category' => 'Personal Belongings',
+                'description' => 'Blue umbrella found near main entrance',
+                'location_found' => 'Main Entrance',
+                'date_found' => '2026-07-01',
+                'photo_url' => null,
+                'storage_location' => 'Cabinet A-01',
+                'status' => 'claimed',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'admin_id' => 2,
+                'item_name' => 'Black Wallet',
+                'category' => 'Personal Belongings',
+                'description' => 'Black wallet found at canteen table',
+                'location_found' => 'Canteen',
+                'date_found' => '2026-07-02',
+                'photo_url' => null,
+                'storage_location' => 'Cabinet A-02',
+                'status' => 'unclaimed',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'admin_id' => 2,
+                'item_name' => 'Scientific Calculator',
+                'category' => 'Electronics',
+                'description' => 'Casio scientific calculator found in Room 402',
+                'location_found' => 'Room 402',
+                'date_found' => '2026-07-08',
+                'photo_url' => null,
+                'storage_location' => 'Cabinet A-03',
+                'status' => 'unclaimed',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('audit_logs')->insert([
+            [
+                'user_id' => 3,
+                'action' => 'Lost Item Reported',
+                'target_type' => 'lost_item_reports',
+                'target_id' => 1,
+                'details' => 'Student reported a lost Blue Umbrella at Main Entrance',
+                'performed_by' => 'Student: Raymart D. Chabas',
+                'ip_address' => '127.0.0.1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'user_id' => 2,
+                'action' => 'Found Item Recorded',
+                'target_type' => 'found_item_records',
+                'target_id' => 1,
+                'details' => 'Admin recorded a found Blue Umbrella at Main Entrance',
+                'performed_by' => 'Admin: Ms. Shelly S. Durban',
+                'ip_address' => '127.0.0.1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+    }
+}
