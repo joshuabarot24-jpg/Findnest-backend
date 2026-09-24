@@ -22,7 +22,7 @@ class ClaimController extends Controller
     {
         $claims = Claim::with(['student', 'admin', 'match.lostReport', 'match.foundRecord', 'ownershipQuestions'])
             ->orderByRaw('photo_similarity_score IS NULL, photo_similarity_score DESC')
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'desc')
             ->get();
 
         $foundIdCounts = $claims->filter(fn($c) => $c->claim_status === 'pending')
