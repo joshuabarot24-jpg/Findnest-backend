@@ -14,8 +14,6 @@ class SupportController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|email',
             'message' => 'required|string',
         ]);
 
@@ -23,10 +21,12 @@ class SupportController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $user = $request->user();
+
         $message = SupportMessage::create([
-            'user_id' => $request->user()?->id,
-            'name' => $request->name,
-            'email' => $request->email,
+            'user_id' => $user?->id,
+            'name' => $user?->name ?? 'Guest',
+            'email' => $user?->email ?? 'unknown@findnest.local',
             'message' => $request->message,
             'status' => 'new',
         ]);
