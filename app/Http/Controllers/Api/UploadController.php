@@ -15,7 +15,7 @@ class UploadController extends Controller
         $validator = Validator::make($request->all(), [
             'image' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240',
             'folder' => 'nullable|string',
-            'analyze' => 'nullable|boolean',
+            'analyze' => 'nullable|in:0,1,true,false',
             'item_hint' => 'nullable|string',
         ]);
 
