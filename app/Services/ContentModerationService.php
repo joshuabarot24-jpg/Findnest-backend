@@ -13,10 +13,8 @@ class ContentModerationService
     {
         $this->apiKey = env('GEMINI_API_KEY');
 
-        // Dynamically reads GEMINI_MODEL from Render env, falling back to gemini-2.5-flash
-        $model = env('GEMINI_MODEL', 'gemini-2.5-flash');
+        $model = env('GEMINI_MODEL', 'gemini-3.6-flash');
 
-        // Clean model string without URL-encoded brackets
         $this->apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
     }
 
@@ -39,7 +37,7 @@ class ContentModerationService
                     [
                         'parts' => [
                             [
-                                'text' => 'Analyze this image for two things. First, content appropriateness: does it contain nudity, violence, graphic content, offensive material, or anything unsuitable for a school lost-and-found system? Second, technical image quality: is it clear (not blurry), well-lit (not too dark or overexposed), and high enough resolution to make out real detail (not tiny, pixelated, or heavily compressed)? Respond with ONLY a JSON object in this exact format, no other text: {"appropriate": true or false, "appropriate_reason": "brief explanation if inappropriate, or empty string", "quality_ok": true or false, "quality_reason": "brief explanation of the specific quality issue if quality_ok is false, or empty string"}'
+                                'text' => 'Analyze this image for two things. First, content appropriateness: does it contain nudity, violence, graphic content, offensive material, or anything unsuitable for a school lost-and-found system? Second, technical image quality — examine this closely: Is the main subject in sharp focus, with clear, well-defined edges? Motion blur, camera shake, or out-of-focus blur should fail this check. Is the lighting adequate to see true colors and surface details (not too dark, not washed out)? Is the resolution high enough that fine details like text, small marks, scratches, or textures would actually be visible if present? If someone tried to use this exact photo to identify a specific item among many similar items, would they be able to, or is it too blurry/dark/low-res to tell apart from another similar item? If in doubt about clarity, err toward failing the check rather than passing it — a school lost-and-found system depends on images being genuinely usable for identification. Respond with ONLY a JSON object in this exact format, no other text: {"appropriate": true or false, "appropriate_reason": "brief explanation if inappropriate, or empty string", "quality_ok": true or false, "quality_reason": "brief explanation of the specific quality issue if quality_ok is false, or empty string"}'
                             ],
                             [
                                 'inline_data' => [
@@ -52,7 +50,6 @@ class ContentModerationService
                 ]
             ]);
 
-            // If Google is down, overloaded (503), or returns an API error, fail-open so users aren't blocked
             if (!$response->successful()) {
                 Log::warning('Gemini moderation check failed (' . $response->status() . '): ' . $response->body() . ' - Bypassing check.');
                 return [
@@ -97,7 +94,6 @@ class ContentModerationService
             ];
         } catch (\Exception $e) {
             Log::error('Content moderation check exception: ' . $e->getMessage());
-            // Fail-open: don't block user if server network hiccup occurs
             return [
                 'passed' => true,
                 'message' => 'Image passed check.',
