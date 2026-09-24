@@ -62,6 +62,121 @@ class AuthController extends Controller
         ]);
     }
 
+    public function unifiedLogin(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'identifier' => 'required|string',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $identifier = trim($request->identifier);
+        $isEmail = str_contains($identifier, '@');
+
+        if (\App\Models\SystemSetting::get('maintenance_mode', '0') === '1') {
+            $user = $isEmail
+                ? User::where('email', $identifier)->first()
+                : User::where('school_id', $identifier)->first();
+
+            if ($user && $user->role !== 'super_admin') {
+                return response()->json(['message' => 'The system is currently under maintenance. Please try again later.'], 503);
+            }
+        }
+
+        if ($isEmail) {
+            $user = User::where('email', $identifier)
+                ->whereIn('role', ['super_admin', 'admin'])
+                ->first();
+
+            if (!$user || !Hash::check($request->password, $user->password)) {
+                return response()->json(['message' => 'Invalid credentials'], 401);
+            }
+
+            if (!$user->is_active) {
+                return response()->json(['message' => 'Account is deactivated'], 403);
+            }
+
+            if ($user->role === 'admin' && $user->is_restricted) {
+                return response()->json(['message' => 'Your account has been suspended by the Super Admin. Please contact them for assistance.'], 403);
+            }
+
+            $user->tokens()->delete();
+            $tokenName = $user->role === 'super_admin' ? 'super-admin-token' : 'admin-token';
+            $token = $user->createToken($tokenName)->plainTextToken;
+
+            AuditLog::create([
+                'user_id' => $user->id,
+                'action' => $user->role === 'super_admin' ? 'Super Admin Login' : 'Admin Login',
+                'target_type' => 'users',
+                'target_id' => $user->id,
+                'details' => ucfirst(str_replace('_', ' ', $user->role)) . ' logged in successfully',
+                'performed_by' => ucfirst(str_replace('_', ' ', $user->role)) . ': ' . $user->name,
+                'ip_address' => $request->ip(),
+            ]);
+
+            return response()->json([
+                'message' => 'Login successful',
+                'requires_otp' => false,
+                'token' => $token,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
+            ]);
+        }
+
+        $user = User::where('school_id', $identifier)
+            ->where('role', 'student')
+            ->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        if (!$user->is_active) {
+            return response()->json(['message' => 'Account is deactivated'], 403);
+        }
+
+        if ($user->is_restricted) {
+            return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
+        }
+
+        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $user->update([
+            'otp_code' => $otp,
+            'otp_expires_at' => Carbon::now()->addMinutes(10),
+        ]);
+
+        $emailHtml = '
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 30px 20px; text-align: center;">
+            <p style="font-size: 20px; font-weight: 900; color: #1a237e; margin-bottom: 4px;">
+                FIND<span style="color: #c99700;">NEST</span>
+            </p>
+            <p style="color: #9ca3af; font-size: 12px; margin-bottom: 30px;">SJDM Cornerstone College Inc.</p>
+            <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">Your verification code is:</p>
+            <p style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #1a237e; margin: 0 0 20px 0;">' . $otp . '</p>
+            <p style="color: #9ca3af; font-size: 12px;">This code expires in 10 minutes.</p>
+            <p style="color: #9ca3af; font-size: 11px; margin-top: 30px;">Do not share this code with anyone.</p>
+        </div>';
+
+        Mail::html($emailHtml, function ($message) use ($user) {
+            $message->to($user->email)
+                ->subject('FindNest — Your Verification Code');
+        });
+
+        return response()->json([
+            'message' => 'OTP sent to your registered email',
+            'requires_otp' => true,
+            'school_id' => $user->school_id,
+            'email' => substr($user->email, 0, 3) . '****@' . explode('@', $user->email)[1],
+        ]);
+    }
+
     public function adminLogin(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -207,7 +322,7 @@ class AuthController extends Controller
         }
 
         $user->tokens()->delete();
-        
+
         $user->update([
             'otp_code' => null,
             'otp_expires_at' => null,
