@@ -58,7 +58,9 @@ class MatchScoreService
 
         $categoryScore = ($report->category === $found->category) ? 100 : 0;
 
-        $temporalSpatialScore = $this->calculateTemporalSpatialScore($report, $found);
+        $dateScore = $this->calculateDateScore($report, $found);
+        $locationScore = $this->calculateLocationScore($report, $found);
+        $temporalSpatialScore = (int) round(($dateScore + $locationScore) / 2);
 
         $baseScore = ($descriptionScore * 0.35) +
             ($photoScore * 0.35) +
@@ -87,7 +89,8 @@ class MatchScoreService
                 'description_score' => $descriptionScore,
                 'photo_score' => $photoScore,
                 'category_score' => $categoryScore,
-                'temporal_spatial_score' => $temporalSpatialScore,
+                'date_score' => $dateScore,
+                'location_score' => $locationScore,
             ]),
             'match_status' => $matchStatus,
             'matched_at' => Carbon::now(),
@@ -149,26 +152,28 @@ class MatchScoreService
         }
     }
 
-    protected function calculateTemporalSpatialScore(LostItemReport $report, FoundItemRecord $found): int
+    protected function calculateDateScore(LostItemReport $report, FoundItemRecord $found): int
     {
         $daysDiff = abs(Carbon::parse($report->date_lost)->diffInDays(Carbon::parse($found->date_found)));
 
         if ($daysDiff <= 1) {
-            $dateScore = 100;
+            return 100;
         } elseif ($daysDiff <= 3) {
-            $dateScore = 75;
+            return 75;
         } elseif ($daysDiff <= 7) {
-            $dateScore = 50;
-        } else {
-            $dateScore = 20;
+            return 50;
         }
+        return 20;
+    }
 
+    protected function calculateLocationScore(LostItemReport $report, FoundItemRecord $found): int
+    {
         $locationA = strtolower(trim($report->location_lost));
         $locationB = strtolower(trim($found->location_found));
 
         similar_text($locationA, $locationB, $locationPercent);
 
-        return (int) round(($dateScore + $locationPercent) / 2);
+        return (int) round($locationPercent);
     }
 
     protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
