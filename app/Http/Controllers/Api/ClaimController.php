@@ -220,6 +220,9 @@ class ClaimController extends Controller
                     'option_c' => $q->option_c,
                     'option_d' => $q->option_d,
                     'student_answer' => $q->student_answer,
+                    'is_correct' => $q->student_answer !== null
+                        ? strtolower($q->student_answer) === strtolower($q->correct_option)
+                        : null,
                 ];
             });
 
@@ -479,7 +482,7 @@ class ClaimController extends Controller
 
         return response()->json(['message' => 'Appeal resolved successfully', 'claim' => $claim]);
     }
-    
+
     public function archive(Request $request)
     {
         $thirtyDaysAgo = now()->subDays(30);
