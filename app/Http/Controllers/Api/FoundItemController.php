@@ -23,6 +23,18 @@ class FoundItemController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->user()->role === 'student') {
+            $activeCount = FoundItemRecord::where('admin_id', $request->user()->id)
+                ->where('status', 'unclaimed')
+                ->count();
+
+            if ($activeCount >= 5) {
+                return response()->json([
+                    'message' => 'You have reached the limit of 5 active found item reports. Please wait for an existing report to be resolved before submitting a new one.',
+                ], 422);
+            }
+        }
+
         $validator = Validator::make($request->all(), [
             'item_name' => 'required|string|max:255',
             'category' => 'required|string',
