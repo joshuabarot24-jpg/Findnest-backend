@@ -19,7 +19,14 @@ class AuditLogController extends Controller
     {
         $logs = AuditLog::with('user')
             ->whereNotIn('action', $this->routineActions)
-            ->when($request->action, fn($q) => $q->where('action', 'like', '%' . $request->action . '%'))
+            ->when($request->action, function ($q) use ($request) {
+                $term = $request->action;
+                $q->where(function ($sub) use ($term) {
+                    $sub->where('action', 'like', '%' . $term . '%')
+                        ->orWhere('details', 'like', '%' . $term . '%')
+                        ->orWhere('performed_by', 'like', '%' . $term . '%');
+                });
+            })
             ->when($request->user_id, fn($q) => $q->where('user_id', $request->user_id))
             ->orderBy('created_at', 'desc')
             ->paginate(50);
