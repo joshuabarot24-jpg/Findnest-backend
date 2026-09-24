@@ -41,6 +41,10 @@ class MatchScoreService
 
     protected function evaluatePair(LostItemReport $report, FoundItemRecord $found)
     {
+        if ($report->user_id === $found->admin_id) {
+            return;
+        }
+
         $existing = AiMatch::where('report_id', $report->id)
             ->where('found_id', $found->id)
             ->first();
