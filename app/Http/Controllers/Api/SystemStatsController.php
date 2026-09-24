@@ -132,6 +132,21 @@ class SystemStatsController extends Controller
 
     public function downloadBackup(Request $request, $filename)
     {
+        $token = $request->query('token');
+        if (!$token) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid or expired token'], 401);
+        }
+
+        $user = $accessToken->tokenable;
+        if (!$user || $user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $path = 'backups/' . $filename;
         if (!\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
             return response()->json(['message' => 'Backup file not found'], 404);

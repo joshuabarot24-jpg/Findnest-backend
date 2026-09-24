@@ -145,8 +145,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/system-settings', [SystemStatsController::class, 'updateSettings']);
     Route::post('/system/backup', [SystemStatsController::class, 'backupNow']);
     Route::get('/system/backups', [SystemStatsController::class, 'listBackups']);
-    Route::get('/system/backups/{filename}', [SystemStatsController::class, 'downloadBackup']);
     Route::get('/system/maintenance-mode', [SystemStatsController::class, 'getMaintenanceMode']);
     Route::post('/system/maintenance-mode', [SystemStatsController::class, 'toggleMaintenanceMode']);
 
 });
+
+    Route::get('/system/backups/{filename}', [SystemStatsController::class, 'downloadBackup']);
