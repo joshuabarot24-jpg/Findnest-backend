@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/collected', [ClaimController::class, 'markCollected']);
             Route::get('/appeals', [ClaimController::class, 'pendingAppeals']);
             Route::post('/{id}/resolve-appeal', [ClaimController::class, 'resolveAppeal']);
+            Route::get('/archive', [ClaimController::class, 'archive']);
         });
     });
 

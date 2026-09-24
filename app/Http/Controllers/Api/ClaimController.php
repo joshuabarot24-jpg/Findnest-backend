@@ -479,4 +479,34 @@ class ClaimController extends Controller
 
         return response()->json(['message' => 'Appeal resolved successfully', 'claim' => $claim]);
     }
+    
+    public function archive(Request $request)
+    {
+        $thirtyDaysAgo = now()->subDays(30);
+
+        $completed = Claim::with(['student', 'match.lostReport', 'match.foundRecord'])
+            ->where('claim_status', 'approved')
+            ->whereNotNull('collected_at')
+            ->where('collected_at', '>=', $thirtyDaysAgo)
+            ->orderBy('collected_at', 'desc')
+            ->get();
+
+        $rejected = Claim::with(['student', 'match.lostReport', 'match.foundRecord'])
+            ->where('claim_status', 'rejected')
+            ->where('updated_at', '>=', $thirtyDaysAgo)
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        $revokedUsers = \App\Models\User::where('is_active', false)
+            ->where('updated_at', '>=', $thirtyDaysAgo)
+            ->select('id', 'name', 'email', 'role', 'school_id', 'updated_at')
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'completed_transactions' => $completed,
+            'rejected_claims' => $rejected,
+            'revoked_accounts' => $revokedUsers,
+        ]);
+    }
 }
