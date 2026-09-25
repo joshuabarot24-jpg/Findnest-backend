@@ -60,15 +60,15 @@ class MatchScoreService
 
         $photoScore = $this->comparePhotos($report->photo_url, $found->photo_url);
 
-        $categoryScore = ($report->category === $found->category) ? 100 : 0;
+        $categoryScore = ($report->category === $found->category) ? 100 : 50;
 
         $dateScore = $this->calculateDateScore($report, $found);
         $locationScore = $this->calculateLocationScore($report, $found);
         $temporalSpatialScore = (int) round(($dateScore + $locationScore) / 2);
 
-        $baseScore = ($descriptionScore * 0.35) +
-            ($photoScore * 0.35) +
-            ($categoryScore * 0.15) +
+        $baseScore = ($descriptionScore * 0.40) +
+            ($photoScore * 0.40) +
+            ($categoryScore * 0.05) +
             ($temporalSpatialScore * 0.15);
 
         $bonusPoints = $this->calculateBonusPoints($report, $found);
