@@ -17,8 +17,11 @@ class AuditLogController extends Controller
 
     public function index(Request $request)
     {
+        $sortDirection = $request->sort === 'oldest' ? 'asc' : 'desc';
+
         $logs = AuditLog::with('user')
             ->whereNotIn('action', $this->routineActions)
+            ->when($request->action_type, fn($q) => $q->where('action', $request->action_type))
             ->when($request->action, function ($q) use ($request) {
                 $term = $request->action;
                 $q->where(function ($sub) use ($term) {
@@ -31,10 +34,21 @@ class AuditLogController extends Controller
                 });
             })
             ->when($request->user_id, fn($q) => $q->where('user_id', $request->user_id))
-            ->orderBy('created_at', 'desc')
+            ->orderBy('created_at', $sortDirection)
             ->paginate(50);
 
         return response()->json(['logs' => $logs]);
+    }
+
+    public function actionTypes()
+    {
+        $types = AuditLog::whereNotIn('action', $this->routineActions)
+            ->select('action')
+            ->distinct()
+            ->orderBy('action')
+            ->pluck('action');
+
+        return response()->json(['action_types' => $types]);
     }
 
     public function byCase(Request $request, $type, $id)

@@ -89,6 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('audit-logs')->middleware('admin.privilege:digital_records')->group(function () {
         Route::get('/', [AuditLogController::class, 'index']);
+        Route::get('/action-types', [AuditLogController::class, 'actionTypes']);
         Route::get('/{type}/{id}', [AuditLogController::class, 'byCase']);
     });
 
