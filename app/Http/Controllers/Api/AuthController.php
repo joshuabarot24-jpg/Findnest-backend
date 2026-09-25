@@ -65,8 +65,8 @@ class AuthController extends Controller
     public function unifiedLogin(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'identifier' => 'required|string',
-            'password' => 'required|string',
+            'identifier' => 'required|string|max:50',
+            'password' => 'required|string|max:50',
         ]);
 
         if ($validator->fails()) {
