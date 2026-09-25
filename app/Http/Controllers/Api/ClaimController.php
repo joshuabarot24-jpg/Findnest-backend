@@ -463,7 +463,7 @@ class ClaimController extends Controller
                 'user_id' => $claim->student_id,
                 'match_id' => $claim->match_id,
                 'title' => 'Appeal Reviewed',
-                'message' => 'Your appeal was reviewed by the Super Admin. The original rejection has been upheld.',
+                'message' => 'Your appeal was reviewed by the Guidance Office. The original rejection has been upheld.',
                 'type' => 'status',
                 'is_read' => false,
                 'sent_at' => Carbon::now(),
@@ -475,8 +475,8 @@ class ClaimController extends Controller
             'action' => 'Claim Appeal Resolved',
             'target_type' => 'claims',
             'target_id' => $claim->id,
-            'details' => 'Super Admin ' . ($request->decision === 'overturn' ? 'overturned the rejection, claim approved' : 'upheld the original rejection') . '. Notes: ' . ($request->resolution_notes ?? 'None'),
-            'performed_by' => 'Super Admin: ' . $request->user()->name,
+            'details' => 'Admin ' . ($request->decision === 'overturn' ? 'overturned the rejection, claim approved' : 'upheld the original rejection') . '. Notes: ' . ($request->resolution_notes ?? 'None'),
+            'performed_by' => 'Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
