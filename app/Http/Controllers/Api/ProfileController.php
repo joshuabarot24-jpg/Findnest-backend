@@ -20,9 +20,31 @@ class ProfileController extends Controller
         $user = $request->user();
 
         if ($user->role === 'student') {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email|unique:users,email,' . $user->id,
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            $oldEmail = $user->email;
+            $user->update(['email' => $request->email]);
+
+            AuditLog::create([
+                'user_id' => $user->id,
+                'action' => 'Email Updated',
+                'target_type' => 'users',
+                'target_id' => $user->id,
+                'details' => 'Student changed their email from ' . $oldEmail . ' to ' . $request->email,
+                'performed_by' => 'Student: ' . $user->name,
+                'ip_address' => $request->ip(),
+            ]);
+
             return response()->json([
-                'message' => 'Your personal information is managed by the school. Contact the Guidance Office to request changes.',
-            ], 403);
+                'message' => 'Email updated successfully',
+                'user' => $user->fresh(),
+            ]);
         }
 
         $validator = Validator::make($request->all(), [
