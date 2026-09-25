@@ -19,14 +19,19 @@ class SystemStatsController extends Controller
 {
     public function index()
     {
-        $totalRecords = User::count()
-            + LostItemReport::count()
-            + FoundItemRecord::count()
-            + AiMatch::count()
-            + Claim::count()
-            + Notification::count()
-            + AuditLog::count()
-            + LocationLog::count();
+        $breakdown = [
+            'students' => User::where('role', 'student')->count(),
+            'admins' => User::whereIn('role', ['admin', 'super_admin'])->count(),
+            'lost_reports' => LostItemReport::count(),
+            'found_items' => FoundItemRecord::count(),
+            'ai_matches' => AiMatch::count(),
+            'claims' => Claim::count(),
+            'notifications' => Notification::count(),
+            'audit_logs' => AuditLog::count(),
+            'location_logs' => LocationLog::count(),
+        ];
+
+        $totalRecords = array_sum($breakdown);
 
         $sizeResult = DB::selectOne("SELECT pg_database_size(current_database()) as size");
         $dbSizeGb = round($sizeResult->size / 1073741824, 2);
@@ -34,6 +39,8 @@ class SystemStatsController extends Controller
         return response()->json([
             'total_records' => $totalRecords,
             'db_size_gb' => $dbSizeGb,
+            'breakdown' => $breakdown,
+            'server_time' => now()->toIso8601String(),
         ]);
     }
 
