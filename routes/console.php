@@ -8,6 +8,7 @@ Schedule::command('items:check-unclaimed')->daily();
 Schedule::command('claims:check-pickup-deadlines')->daily();
 Schedule::command('trust:passive-recovery')->cron('0 */5 * * *');
 Schedule::command('tokens:cleanup')->hourly();
+Schedule::command('records:auto-backup')->daily();
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
