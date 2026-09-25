@@ -25,7 +25,9 @@ class AuditLogController extends Controller
                     $sub->where('action', 'ilike', '%' . $term . '%')
                         ->orWhere('details', 'ilike', '%' . $term . '%')
                         ->orWhere('performed_by', 'ilike', '%' . $term . '%')
-                        ->orWhereRaw("CONCAT('REC-', LPAD(id::text, 3, '0')) ilike ?", ['%' . $term . '%']);
+                        ->orWhereRaw("CONCAT('REC-', LPAD(id::text, 3, '0')) ilike ?", ['%' . $term . '%'])
+                        ->orWhereRaw("TO_CHAR(created_at, 'MM/DD/YYYY') ilike ?", ['%' . $term . '%'])
+                        ->orWhereRaw("TO_CHAR(created_at, 'HH12:MI AM') ilike ?", ['%' . $term . '%']);
                 });
             })
             ->when($request->user_id, fn($q) => $q->where('user_id', $request->user_id))
