@@ -22,9 +22,9 @@ class AuditLogController extends Controller
             ->when($request->action, function ($q) use ($request) {
                 $term = $request->action;
                 $q->where(function ($sub) use ($term) {
-                    $sub->where('action', 'like', '%' . $term . '%')
-                        ->orWhere('details', 'like', '%' . $term . '%')
-                        ->orWhere('performed_by', 'like', '%' . $term . '%');
+                    $sub->where('action', 'ilike', '%' . $term . '%')
+                        ->orWhere('details', 'ilike', '%' . $term . '%')
+                        ->orWhere('performed_by', 'ilike', '%' . $term . '%');
                 });
             })
             ->when($request->user_id, fn($q) => $q->where('user_id', $request->user_id))
