@@ -11,15 +11,23 @@ class CaseTrailController extends Controller
     public function index(Request $request)
     {
         $reports = LostItemReport::with(['user', 'aiMatches.foundRecord', 'aiMatches.claim'])
-            ->when($request->search, function ($q) use ($request) {
-                $q->where('item_name', 'like', '%' . $request->search . '%');
-            })
             ->orderBy('created_at', 'desc')
             ->get();
 
         $cases = $reports->map(function ($report) {
             return $this->buildCaseSummary($report);
         });
+
+        if ($request->search) {
+            $term = strtolower($request->search);
+            $cases = $cases->filter(function ($case) use ($term) {
+                return str_contains(strtolower($case['item_name']), $term)
+                    || str_contains(strtolower($case['category']), $term)
+                    || str_contains(strtolower($case['case_id']), $term)
+                    || str_contains(strtolower($case['status']), $term)
+                    || str_contains(strtolower($case['reported_by'] ?? ''), $term);
+            })->values();
+        }
 
         return response()->json(['cases' => $cases]);
     }
