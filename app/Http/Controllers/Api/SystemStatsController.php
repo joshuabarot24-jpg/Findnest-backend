@@ -196,4 +196,95 @@ class SystemStatsController extends Controller
             'maintenance_mode' => $request->boolean('maintenance_mode'),
         ]);
     }
+
+    public function checkPendingCleanup()
+{
+    $pending = SystemSetting::get('pending_cleanup_prompt', '0') === '1';
+    $filename = SystemSetting::get('pending_cleanup_filename', null);
+
+    return response()->json([
+        'pending' => $pending,
+        'filename' => $filename,
+    ]);
+}
+
+public function confirmCleanup(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'confirm' => 'required|boolean',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    if ($request->boolean('confirm')) {
+        \App\Models\OwnershipQuestion::truncate();
+        Claim::truncate();
+        AiMatch::truncate();
+        LostItemReport::truncate();
+        FoundItemRecord::truncate();
+        Notification::truncate();
+        \App\Models\SupportReply::truncate();
+        \App\Models\SupportMessage::truncate();
+        LocationLog::truncate();
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Records Cleaned After Backup',
+            'target_type' => 'system',
+            'target_id' => 0,
+            'details' => 'Super Admin confirmed deletion of transactional records after 30-day auto-backup. User accounts were not affected.',
+            'performed_by' => 'Super Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+    } else {
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Cleanup Declined',
+            'target_type' => 'system',
+            'target_id' => 0,
+            'details' => 'Super Admin declined to delete records after 30-day auto-backup, records retained.',
+            'performed_by' => 'Super Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+    }
+
+    SystemSetting::set('pending_cleanup_prompt', '0');
+    SystemSetting::set('pending_cleanup_filename', '');
+
+    return response()->json(['message' => 'Cleanup preference recorded.']);
+    }
+
+    public function importBackupPreview(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:json|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $content = file_get_contents($request->file('file')->getRealPath());
+        $data = json_decode($content, true);
+
+        if (!is_array($data)) {
+            return response()->json(['message' => 'This file is not a valid backup JSON.'], 422);
+        }
+
+        $summary = [];
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $summary[$key] = count($value);
+            }
+        }
+
+        return response()->json([
+            'backup_created_at' => $data['backup_created_at'] ?? 'Unknown',
+            'backup_type' => $data['backup_type'] ?? 'manual',
+            'summary' => $summary,
+            'data' => $data,
+        ]);
+    }
 }

@@ -149,6 +149,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/system/backups', [SystemStatsController::class, 'listBackups']);
     Route::get('/system/maintenance-mode', [SystemStatsController::class, 'getMaintenanceMode']);
     Route::post('/system/maintenance-mode', [SystemStatsController::class, 'toggleMaintenanceMode']);
+    Route::get('/system/pending-cleanup', [SystemStatsController::class, 'checkPendingCleanup']);
+    Route::post('/system/confirm-cleanup', [SystemStatsController::class, 'confirmCleanup']);
+    Route::post('/system/import-backup-preview', [SystemStatsController::class, 'importBackupPreview']);
 
 });
 
