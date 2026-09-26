@@ -117,4 +117,20 @@ class SupportController extends Controller
 
         return response()->json(['message' => 'Reply sent successfully', 'data' => $reply], 201);
     }
+
+    public function askChatbot(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'question' => 'required|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $chatbot = new \App\Services\FaqChatbotService();
+        $result = $chatbot->answerQuestion($request->question);
+
+        return response()->json(['answer' => $result['answer']]);
+    }
 }

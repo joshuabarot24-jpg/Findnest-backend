@@ -135,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('support')->group(function () {
         Route::post('/', [SupportController::class, 'store']);
+        Route::post('/ask', [SupportController::class, 'askChatbot']);
         Route::get('/my-messages', [SupportController::class, 'myMessages']);
 
         Route::middleware('admin.privilege:support_inbox')->group(function () {
