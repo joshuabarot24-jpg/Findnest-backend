@@ -220,4 +220,41 @@ class UserManagementController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        if ($user->role !== 'student') {
+            return response()->json(['message' => 'Only student accounts can be deleted this way.'], 403);
+        }
+
+        if ($user->is_active) {
+            return response()->json(['message' => 'This account must be revoked before it can be permanently deleted.'], 422);
+        }
+
+        $name = $user->name;
+
+        \App\Models\OwnershipQuestion::whereIn('claim_id', \App\Models\Claim::where('student_id', $user->id)->pluck('id'))->delete();
+        \App\Models\Claim::where('student_id', $user->id)->delete();
+        \App\Models\AiMatch::whereIn('report_id', \App\Models\LostItemReport::where('user_id', $user->id)->pluck('id'))->delete();
+        \App\Models\LostItemReport::where('user_id', $user->id)->delete();
+        \App\Models\Notification::where('user_id', $user->id)->delete();
+        \App\Models\SupportReply::where('user_id', $user->id)->delete();
+        \App\Models\SupportMessage::where('user_id', $user->id)->delete();
+
+        $user->delete();
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Student Account Permanently Deleted',
+            'target_type' => 'users',
+            'target_id' => $id,
+            'details' => 'Admin permanently deleted revoked student account: ' . $name,
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Student account permanently deleted.']);
+    }
+
 }
