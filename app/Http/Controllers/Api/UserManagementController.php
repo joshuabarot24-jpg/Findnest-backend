@@ -257,4 +257,26 @@ class UserManagementController extends Controller
         return response()->json(['message' => 'Student account permanently deleted.']);
     }
 
+    public function adjustTrustScore(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'points' => 'required|integer|min:-100|max:100',
+            'reason' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::findOrFail($id);
+        if ($user->role !== 'student') {
+            return response()->json(['message' => 'Trust score only applies to student accounts.'], 403);
+        }
+
+        $trustService = new \App\Services\TrustScoreService();
+        $trustService->adjustScore($user, (int) $request->points, 'Manual adjustment by Super Admin: ' . $request->reason);
+
+        return response()->json(['message' => 'Trust score updated successfully', 'user' => $user->fresh()]);
+    }
+
 }
