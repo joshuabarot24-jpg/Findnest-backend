@@ -41,6 +41,7 @@ class SystemStatsController extends Controller
             'db_size_gb' => $dbSizeGb,
             'breakdown' => $breakdown,
             'server_time' => now()->toIso8601String(),
+            'system_version' => SystemSetting::get('system_version', '1.0.0'),
         ]);
     }
 
@@ -286,5 +287,27 @@ public function confirmCleanup(Request $request)
             'summary' => $summary,
             'data' => $data,
         ]);
+    }
+
+    public function bumpVersion(Request $request)
+    {
+        $current = SystemSetting::get('system_version', '1.0.0');
+        $parts = explode('.', $current);
+        $parts[2] = (int) ($parts[2] ?? 0) + 1;
+        $newVersion = implode('.', $parts);
+
+        SystemSetting::set('system_version', $newVersion);
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'System Version Updated',
+            'target_type' => 'system_settings',
+            'target_id' => 0,
+            'details' => 'System version bumped from ' . $current . ' to ' . $newVersion,
+            'performed_by' => 'Super Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Version updated', 'system_version' => $newVersion]);
     }
 }

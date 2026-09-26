@@ -156,6 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/system/pending-cleanup', [SystemStatsController::class, 'checkPendingCleanup']);
     Route::post('/system/confirm-cleanup', [SystemStatsController::class, 'confirmCleanup']);
     Route::post('/system/import-backup-preview', [SystemStatsController::class, 'importBackupPreview']);
+    Route::post('/system/bump-version', [SystemStatsController::class, 'bumpVersion']);
 
 });
 
