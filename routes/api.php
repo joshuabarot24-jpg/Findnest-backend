@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [FoundItemController::class, 'show']);
         Route::put('/{id}', [FoundItemController::class, 'update']);
         Route::delete('/{id}', [FoundItemController::class, 'destroy']);
+        Route::post('/{id}/document-disposal', [FoundItemController::class, 'documentDisposal']);
     });
 
     Route::prefix('claims')->group(function () {

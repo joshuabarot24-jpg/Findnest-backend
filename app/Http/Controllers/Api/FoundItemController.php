@@ -140,4 +140,34 @@ class FoundItemController extends Controller
 
         return response()->json(['message' => 'Record deleted successfully']);
     }
+
+    public function documentDisposal(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'disposal_notes' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $record = FoundItemRecord::findOrFail($id);
+        $record->update([
+            'status' => 'for_disposal',
+            'disposal_notes' => $request->disposal_notes,
+            'disposed_at' => now(),
+        ]);
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Item Disposal Documented',
+            'target_type' => 'found_item_records',
+            'target_id' => $record->id,
+            'details' => 'Admin documented disposal of "' . $record->item_name . '": ' . $request->disposal_notes,
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Disposal documented successfully', 'record' => $record]);
+    }
 }
