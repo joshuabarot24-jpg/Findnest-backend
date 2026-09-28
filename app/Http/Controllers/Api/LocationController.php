@@ -27,6 +27,40 @@ class LocationController extends Controller
         return response()->json(['hotspots' => $hotspots]);
     }
 
+        public function topLocations()
+    {
+        return response()->json([
+            'lost' => $this->topFrom('lost_item_reports', 'location_lost'),
+            'found' => $this->topFrom('found_item_records', 'location_found'),
+        ]);
+    }
+
+    private function topFrom(string $table, string $column): array
+    {
+        $base = DB::table($table)
+            ->whereNotNull($column)
+            ->whereRaw("TRIM($column) <> ''");
+
+        $total = (clone $base)->count();
+
+        $rows = (clone $base)
+            ->selectRaw("LOWER(REGEXP_REPLACE(TRIM($column), '\\s+', ' ', 'g')) as norm, MIN(TRIM($column)) as label, COUNT(*) as count")
+            ->groupBy('norm')
+            ->orderByDesc('count')
+            ->orderBy('norm')
+            ->limit(3)
+            ->get();
+
+        return [
+            'total' => $total,
+            'top' => $rows->map(fn($r) => [
+                'location' => $r->label,
+                'count' => (int) $r->count,
+                'percent' => $total > 0 ? (int) round(($r->count / $total) * 100) : 0,
+            ])->values(),
+        ];
+    }
+
     public function store(Request $request)
     {
         $log = LocationLog::create([
