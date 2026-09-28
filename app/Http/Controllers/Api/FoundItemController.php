@@ -12,6 +12,16 @@ class FoundItemController extends Controller
 {
     public function index(Request $request)
     {
+        $lastRun = \App\Models\SystemSetting::get('last_unclaimed_check_at', null);
+        if (!$lastRun || \Carbon\Carbon::parse($lastRun)->diffInMinutes(now()) >= 60) {
+            \App\Models\SystemSetting::set('last_unclaimed_check_at', now()->toIso8601String());
+            try {
+                \Illuminate\Support\Facades\Artisan::call('items:check-unclaimed');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Unclaimed check failed: ' . $e->getMessage());
+            }
+        }
+
         $records = FoundItemRecord::with('admin')
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->category, fn($q) => $q->where('category', $request->category))
