@@ -20,6 +20,12 @@ class FoundItemRecord extends Model
         'storage_location',
         'status',
         'ai_description',
+        'unclaimed_flagged_at',
+        'needs_disposal_review',
+        'disposal_notes',
+        'disposed_at',
+        'condition_on_receipt',
+        'condition_notes',
     ];
 
     protected $casts = [
