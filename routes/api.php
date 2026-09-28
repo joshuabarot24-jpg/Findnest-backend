@@ -159,6 +159,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/system/confirm-cleanup', [SystemStatsController::class, 'confirmCleanup']);
     Route::post('/system/import-backup-preview', [SystemStatsController::class, 'importBackupPreview']);
     Route::post('/system/bump-version', [SystemStatsController::class, 'bumpVersion']);
+    Route::get('/system/trust-settings', [SystemStatsController::class, 'getTrustSettings']);
+    Route::put('/system/trust-settings', [SystemStatsController::class, 'updateTrustSettings']);
 
 });
 

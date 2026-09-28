@@ -289,6 +289,53 @@ public function confirmCleanup(Request $request)
         ]);
     }
 
+        public function getTrustSettings()
+    {
+        return response()->json([
+            'restriction_days' => \App\Services\TrustScoreService::restrictionDays(),
+            'restriction_threshold' => \App\Services\TrustScoreService::restrictionThreshold(),
+        ]);
+    }
+
+    public function updateTrustSettings(Request $request)
+    {
+        if ($request->user()->role !== 'super_admin') {
+            return response()->json(['message' => 'Only the Super Admin can change this setting.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'restriction_days' => 'required|integer|min:0|max:90',
+            'restriction_threshold' => 'required|integer|min:10|max:90',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $days = (int) $request->restriction_days;
+        $threshold = (int) $request->restriction_threshold;
+
+        SystemSetting::set('trust_restriction_days', (string) $days);
+        SystemSetting::set('trust_restriction_threshold', (string) $threshold);
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'System Setting Updated',
+            'target_type' => 'system_settings',
+            'target_id' => 0,
+            'details' => 'Trust score restriction changed: below ' . $threshold . ' restricts for '
+                . ($days > 0 ? $days . ' day' . ($days === 1 ? '' : 's') : 'until an administrator re-enables access'),
+            'performed_by' => 'Super Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Trust score settings updated',
+            'restriction_days' => $days,
+            'restriction_threshold' => $threshold,
+        ]);
+    }
+
     public function bumpVersion(Request $request)
     {
         $current = SystemSetting::get('system_version', '1.0.0');
