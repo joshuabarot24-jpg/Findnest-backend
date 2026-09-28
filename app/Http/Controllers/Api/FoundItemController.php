@@ -163,7 +163,7 @@ class FoundItemController extends Controller
 
         $record = FoundItemRecord::findOrFail($id);
         $record->update([
-            'status' => 'for_disposal',
+            'status' => 'disposed',
             'disposal_notes' => $request->disposal_notes,
             'disposed_at' => now(),
         ]);
