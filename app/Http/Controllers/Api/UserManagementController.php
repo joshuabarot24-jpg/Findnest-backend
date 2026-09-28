@@ -55,6 +55,10 @@ class UserManagementController extends Controller
             'trust_score' => 100,
         ]);
 
+        if ($user->role === 'student') {
+            $user->forceFill(['password_is_temporary' => true])->save();
+        }
+
         AuditLog::create([
             'user_id' => $request->user()->id,
             'action' => 'User Created',
@@ -78,6 +82,7 @@ class UserManagementController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $id,
+            'password' => 'nullable|string|min:8|max:50',
             'role' => 'required|in:super_admin,admin,student',
             'school_id' => 'nullable|string|unique:users,school_id,' . $id,
             'course' => 'nullable|string',
@@ -107,8 +112,17 @@ class UserManagementController extends Controller
             'restricted_until' => $request->restricted_until,
         ]);
 
-        if ($request->password && $user->role !== 'student') {
+                if ($request->password) {
             $user->update(['password' => Hash::make($request->password)]);
+
+            if ($user->role === 'student') {
+                $user->forceFill([
+                    'password_is_temporary' => true,
+                    'password_change_requested' => false,
+                    'password_change_approved' => false,
+                    'password_change_reason' => null,
+                ])->save();
+            }
         }
 
         AuditLog::create([

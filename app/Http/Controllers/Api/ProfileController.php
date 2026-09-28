@@ -130,8 +130,9 @@ class ProfileController extends Controller
     public function setNewPassword(Request $request)
     {
         $user = $request->user();
+        $isTemporary = (bool) $user->password_is_temporary;
 
-        if (!$user->password_change_approved) {
+        if (!$user->password_change_approved && !$isTemporary) {
             return response()->json(['message' => 'Your password change has not been approved yet.'], 403);
         }
 
@@ -143,6 +144,10 @@ class ProfileController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        if (Hash::check($request->new_password, $user->password)) {
+            return response()->json(['message' => 'Your new password must be different from your current one.'], 422);
+        }
+
         $user->update([
             'password' => Hash::make($request->new_password),
             'password_last_changed_at' => now(),
@@ -150,13 +155,16 @@ class ProfileController extends Controller
             'password_change_approved' => false,
             'password_change_reason' => null,
         ]);
+        $user->forceFill(['password_is_temporary' => false])->save();
 
         AuditLog::create([
             'user_id' => $user->id,
             'action' => 'Password Changed',
             'target_type' => 'users',
             'target_id' => $user->id,
-            'details' => 'Student set a new password after Super Admin approval',
+            'details' => $isTemporary
+                ? 'Student replaced their temporary password with their own'
+                : 'Student set a new password after Super Admin approval',
             'performed_by' => 'Student: ' . $user->name,
             'ip_address' => $request->ip(),
         ]);
