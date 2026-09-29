@@ -18,10 +18,9 @@ use App\Services\TrustScoreService;
 
 class ClaimController extends Controller
 {
-    public function index()
+        public function index()
     {
         $claims = Claim::with(['student', 'admin', 'match.lostReport', 'match.foundRecord', 'ownershipQuestions'])
-            ->orderByRaw('photo_similarity_score IS NULL, photo_similarity_score DESC')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -34,7 +33,42 @@ class ClaimController extends Controller
             $claim->competing_claims_count = $foundId ? ($foundIdCounts[$foundId] ?? 1) : 1;
         });
 
-        return response()->json(['claims' => $claims]);
+        $groupAnchor = [];
+        foreach ($claims as $claim) {
+            $foundId = $claim->match?->found_id;
+            $isCompeting = $claim->claim_status === 'pending' && $foundId && ($foundIdCounts[$foundId] ?? 1) > 1;
+            if ($isCompeting && !isset($groupAnchor[$foundId])) {
+                $groupAnchor[$foundId] = $claim->created_at;
+            }
+        }
+
+        $sorted = $claims->sort(function ($a, $b) use ($groupAnchor, $foundIdCounts) {
+            $aFoundId = $a->match?->found_id;
+            $bFoundId = $b->match?->found_id;
+            $aCompeting = $a->claim_status === 'pending' && $aFoundId && ($foundIdCounts[$aFoundId] ?? 1) > 1;
+            $bCompeting = $b->claim_status === 'pending' && $bFoundId && ($foundIdCounts[$bFoundId] ?? 1) > 1;
+
+            $aSortTime = $aCompeting ? $groupAnchor[$aFoundId] : $a->created_at;
+            $bSortTime = $bCompeting ? $groupAnchor[$bFoundId] : $b->created_at;
+
+            $timeCompare = $bSortTime <=> $aSortTime;
+            if ($timeCompare !== 0) {
+                return $timeCompare;
+            }
+
+            if ($aCompeting && $bCompeting && $aFoundId === $bFoundId) {
+                $aScore = $a->photo_similarity_score;
+                $bScore = $b->photo_similarity_score;
+                if ($aScore === null && $bScore === null) return 0;
+                if ($aScore === null) return 1;
+                if ($bScore === null) return -1;
+                return $bScore <=> $aScore;
+            }
+
+            return 0;
+        })->values();
+
+        return response()->json(['claims' => $sorted]);
     }
 
     public function myClaims(Request $request)
