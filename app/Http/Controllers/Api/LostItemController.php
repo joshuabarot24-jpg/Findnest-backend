@@ -32,14 +32,18 @@ class LostItemController extends Controller
 
     public function store(Request $request)
     {
-        $activeCount = LostItemReport::where('user_id', $request->user()->id)
-            ->where('status', 'searching')
-            ->count();
+        $isAdmin = in_array($request->user()->role, ['admin', 'super_admin']);
 
-        if ($activeCount >= 5) {
-            return response()->json([
-                'message' => 'You have reached the limit of 5 active lost item reports. Please wait for an existing report to be resolved before submitting a new one.',
-            ], 422);
+        if (!$isAdmin) {
+            $activeCount = LostItemReport::where('user_id', $request->user()->id)
+                ->where('status', 'searching')
+                ->count();
+
+            if ($activeCount >= 5) {
+                return response()->json([
+                    'message' => 'You have reached the limit of 5 active lost item reports. Please wait for an existing report to be resolved before submitting a new one.',
+                ], 422);
+            }
         }
 
         $validator = Validator::make($request->all(), [
@@ -88,7 +92,7 @@ class LostItemController extends Controller
             'target_type' => 'lost_item_reports',
             'target_id' => $report->id,
             'details' => 'Student reported lost item: ' . $report->item_name . ' and ' . $report->location_lost,
-            'performed_by' => 'Student: ' . $request->user()->name,
+            'performed_by' => ($isAdmin ? 'Admin' : 'Student') . ': ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
