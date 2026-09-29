@@ -48,7 +48,12 @@ class LostItemController extends Controller
             'description' => 'nullable|string',
             'ai_description' => 'nullable|string',
             'location_lost' => 'required|string',
-            'date_lost' => 'required|date',
+            'date_lost' => ['required', 'date', function ($attribute, $value, $fail) {
+                $today = \Carbon\Carbon::now('Asia/Manila')->toDateString();
+                if ($value !== $today) {
+                    $fail('The date must be today\'s date (' . $today . ').');
+                }
+            }],
             'approx_time' => 'nullable|string',
             'primary_color' => 'nullable|string',
             'brand_model' => 'nullable|string',
