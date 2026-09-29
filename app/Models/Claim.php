@@ -22,7 +22,9 @@ class Claim extends Model
         'appeal_status',
         'appeal_submitted_at',
         'appeal_photo_url',
-        'proof_photo_urls' => 'array',
+        'proof_photo_urls',
+        'verification_skipped',
+        'verification_skip_reason',
     ];
 
     protected $casts = [

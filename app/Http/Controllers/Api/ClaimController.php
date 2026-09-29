@@ -122,9 +122,9 @@ class ClaimController extends Controller
         }
 
         $questionService = new OwnershipQuestionService();
-        $questionsGenerated = $questionService->generateQuestions($claim);
+        $questionResult = $questionService->generateQuestions($claim);
 
-        if ($questionsGenerated) {
+        if ($questionResult['status'] === 'generated') {
             AuditLog::create([
                 'user_id' => $request->user()->id,
                 'action' => 'Ownership Questions Generated',
@@ -134,12 +134,27 @@ class ClaimController extends Controller
                 'performed_by' => 'System: AI Engine',
                 'ip_address' => $request->ip(),
             ]);
+        } elseif ($questionResult['status'] === 'skipped') {
+            $claim->update([
+                'verification_skipped' => true,
+                'verification_skip_reason' => $questionResult['reason'],
+            ]);
+
+            AuditLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Ownership Questions Skipped',
+                'target_type' => 'claims',
+                'target_id' => $claim->id,
+                'details' => 'AI determined this item has no distinguishing features to verify: ' . $questionResult['reason'],
+                'performed_by' => 'System: AI Engine',
+                'ip_address' => $request->ip(),
+            ]);
         }
 
         return response()->json([
             'message' => 'Claim submitted successfully',
             'claim' => $claim,
-            'questions_generated' => $questionsGenerated,
+            'questions_generated' => $questionResult['status'] === 'generated',
         ], 201);
     }
 

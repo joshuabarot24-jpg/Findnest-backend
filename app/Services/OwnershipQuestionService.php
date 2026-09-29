@@ -16,20 +16,20 @@ class OwnershipQuestionService
         $this->apiKey = env('GEMINI_API_KEY');
     }
 
-    public function generateQuestions(Claim $claim): bool
+    public function generateQuestions(Claim $claim): array
     {
         $match = $claim->match()->with('foundRecord')->first();
 
         if (!$match || !$match->foundRecord) {
             Log::error('Cannot generate ownership questions: no found record linked to claim ' . $claim->id);
-            return false;
+            return ['status' => 'failed'];
         }
 
         $description = $match->foundRecord->ai_description ?: $match->foundRecord->description;
 
         if (empty($description)) {
             Log::error('Cannot generate ownership questions: found record has no description for claim ' . $claim->id);
-            return false;
+            return ['status' => 'failed'];
         }
 
         try {
@@ -38,7 +38,7 @@ class OwnershipQuestionService
                     [
                         'parts' => [
                             [
-                                'text' => "Based on this detailed description of a found item, create exactly 3 multiple-choice ownership verification questions. Each question should test a subtle, specific, non-obvious detail (such as color combinations, brand markings, distinctive features, materials, or small imperfections) that only the true owner would know. Do NOT ask about the general category or obvious features. Each question needs exactly 4 answer options, with only one correct. Respond with ONLY a JSON array in this exact format, no other text: [{\"question\": \"...\", \"option_a\": \"...\", \"option_b\": \"...\", \"option_c\": \"...\", \"option_d\": \"...\", \"correct_option\": \"a\"}, ...]\n\nItem description: {$description}"
+                                'text' => "You are deciding whether an item has enough distinguishing detail to generate ownership verification questions. First, check the description below: does it contain ANY genuinely distinguishing details beyond a generic type, color, or category — such as brand markings, model names, unique printed text, scratches, dents, stickers, engravings, or other specific identifying marks a random person would not know? If it does NOT contain such details (the description is generic, e.g. just 'black backpack' or 'silver key'), respond with ONLY this JSON, no other text: {\"skip\": true, \"reason\": \"short plain-language reason, under 15 words\"}. If it DOES contain distinguishing details, create exactly 3 multiple-choice ownership verification questions, each testing a subtle, specific, non-obvious detail from those distinguishing features. Do NOT ask about the general category or obvious features. Each question needs exactly 4 answer options, with only one correct. Respond with ONLY this JSON, no other text: {\"skip\": false, \"questions\": [{\"question\": \"...\", \"option_a\": \"...\", \"option_b\": \"...\", \"option_c\": \"...\", \"option_d\": \"...\", \"correct_option\": \"a\"}, ...]}\n\nItem description: {$description}"
                             ]
                         ]
                     ]
@@ -47,18 +47,32 @@ class OwnershipQuestionService
 
             if (!$response->successful()) {
                 Log::error('Ownership question generation failed: ' . $response->body());
-                return false;
+                return ['status' => 'failed'];
             }
 
             $data = $response->json();
             $textResult = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
             $cleanedText = trim(preg_replace('/```json\s*|\s*```/', '', $textResult));
 
-            $questions = json_decode($cleanedText, true);
+            $result = json_decode($cleanedText, true);
+
+            if (!is_array($result)) {
+                Log::error('Ownership questions returned unexpected format: ' . $textResult);
+                return ['status' => 'failed'];
+            }
+
+            if (($result['skip'] ?? false) === true) {
+                return [
+                    'status' => 'skipped',
+                    'reason' => $result['reason'] ?? 'No distinguishing features detected',
+                ];
+            }
+
+            $questions = $result['questions'] ?? null;
 
             if (!is_array($questions) || count($questions) === 0) {
                 Log::error('Ownership questions returned unexpected format: ' . $textResult);
-                return false;
+                return ['status' => 'failed'];
             }
 
             foreach ($questions as $q) {
@@ -77,10 +91,10 @@ class OwnershipQuestionService
                 ]);
             }
 
-            return true;
+            return ['status' => 'generated'];
         } catch (\Exception $e) {
             Log::error('Ownership question generation exception: ' . $e->getMessage());
-            return false;
+            return ['status' => 'failed'];
         }
     }
 }
