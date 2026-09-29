@@ -17,6 +17,7 @@ class FoundItemController extends Controller
             \App\Models\SystemSetting::set('last_unclaimed_check_at', now()->toIso8601String());
             try {
                 \Illuminate\Support\Facades\Artisan::call('items:check-unclaimed');
+                \Illuminate\Support\Facades\Artisan::call('items:check-surrender-deadlines');
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('Unclaimed check failed: ' . $e->getMessage());
             }
@@ -65,6 +66,8 @@ class FoundItemController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $isStudent = $request->user()->role === 'student';
+
         $record = FoundItemRecord::create([
             'admin_id' => $request->user()->id,
             'item_name' => $request->item_name,
@@ -72,6 +75,9 @@ class FoundItemController extends Controller
             'description' => $request->description,
             'ai_description' => $request->ai_description,
             'location_found' => $request->location_found,
+            'receipt_confirmed' => !$isStudent,
+            'receipt_confirmed_at' => !$isStudent ? now() : null,
+            'surrender_deadline' => $isStudent ? now()->addDays(2) : null,
             'date_found' => $request->date_found,
             'approx_time' => $request->approx_time,
             'primary_color' => $request->primary_color,
@@ -92,11 +98,15 @@ class FoundItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        $matchService = new MatchScoreService();
-        $matchService->checkNewFoundRecord($record);
+                if ($record->receipt_confirmed) {
+            $matchService = new MatchScoreService();
+            $matchService->checkNewFoundRecord($record);
+        }
 
         return response()->json([
-            'message' => 'Found item recorded successfully',
+            'message' => $record->receipt_confirmed
+                ? 'Found item recorded successfully'
+                : 'Found item report submitted. Please surrender it to Ms. Shelly S. Durban within 2 school days — matching will begin once receipt is confirmed.',
             'record' => $record
         ], 201);
     }
@@ -179,5 +189,35 @@ class FoundItemController extends Controller
         ]);
 
         return response()->json(['message' => 'Disposal documented successfully', 'record' => $record]);
+    }
+
+    public function confirmReceipt(Request $request, $id)
+    {
+        $record = FoundItemRecord::findOrFail($id);
+
+        if ($record->receipt_confirmed) {
+            return response()->json(['message' => 'Receipt was already confirmed for this item.'], 422);
+        }
+
+        $record->update([
+            'receipt_confirmed' => true,
+            'receipt_confirmed_at' => now(),
+            'surrender_deadline' => null,
+        ]);
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Item Receipt Confirmed',
+            'target_type' => 'found_item_records',
+            'target_id' => $record->id,
+            'details' => 'Admin confirmed physical receipt of "' . $record->item_name . '", AI matching now active',
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        $matchService = new MatchScoreService();
+        $matchService->checkNewFoundRecord($record);
+
+        return response()->json(['message' => 'Receipt confirmed, item is now active and matched against lost reports.', 'record' => $record]);
     }
 }

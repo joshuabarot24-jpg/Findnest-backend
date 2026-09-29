@@ -26,10 +26,16 @@ class FoundItemRecord extends Model
         'disposed_at',
         'condition_on_receipt',
         'condition_notes',
+        'surrender_deadline',
+        'receipt_confirmed',
+        'receipt_confirmed_at',
     ];
 
     protected $casts = [
     'photo_urls' => 'array',
+    'receipt_confirmed' => 'boolean',
+    'surrender_deadline' => 'datetime',
+    'receipt_confirmed_at' => 'datetime',
     ];
 
     public function admin()
