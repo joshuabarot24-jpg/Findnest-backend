@@ -249,7 +249,26 @@ class ClaimTest extends TestCase
 
         $claim->refresh();
         $this->assertEquals('approved', $claim->claim_status);
-        $this->assertEquals('approved', $claim->appeal_status);
+        $this->assertEquals('resolved', $claim->appeal_status);
+    }
+
+    public function test_admin_can_uphold_rejected_claim_appeal(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $claim = Claim::factory()->appealed()->create();
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->postJson("/api/claims/{$claim->id}/resolve-appeal", [
+            'decision' => 'uphold',
+            'resolution_notes' => 'Insufficient additional proof provided.',
+        ]);
+
+        $response->assertStatus(200);
+
+        $claim->refresh();
+        $this->assertEquals('rejected', $claim->claim_status);
+        $this->assertEquals('resolved', $claim->appeal_status);
     }
 
     public function test_admin_can_mark_item_as_collected(): void
@@ -264,9 +283,14 @@ class ClaimTest extends TestCase
         $response = $this->postJson("/api/claims/{$claim->id}/collected");
 
         $response->assertStatus(200)
-            ->assertJsonPath('claim.claim_status', 'collected');
+            ->assertJsonPath('claim.claim_status', 'approved')
+            ->assertJsonPath('claim.collected_at', fn ($val) => !is_null($val));
 
         $claim->refresh();
+        $this->assertEquals('approved', $claim->claim_status);
         $this->assertNotNull($claim->collected_at);
+
+        $foundRecord->refresh();
+        $this->assertEquals('claimed', $foundRecord->status);
     }
 }

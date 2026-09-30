@@ -210,13 +210,15 @@ class EndToEndWorkflowTest extends TestCase
         // =========================================================================
         $collectedResponse = $this->withHeaders($adminHeaders)->postJson("/api/claims/{$claimId}/collected");
         $collectedResponse->assertStatus(200)
-            ->assertJsonPath('claim.claim_status', 'collected');
+            ->assertJsonPath('claim.claim_status', 'approved')
+            ->assertJsonPath('claim.collected_at', fn ($val) => !is_null($val));
 
         // Final Assertions on the Database State
         $this->assertDatabaseHas('claims', [
             'id' => $claimId,
-            'claim_status' => 'collected',
+            'claim_status' => 'approved',
         ]);
+        $this->assertNotNull(\App\Models\Claim::find($claimId)->collected_at);
 
         $this->assertDatabaseHas('lost_item_reports', [
             'id' => $lostReportId,
