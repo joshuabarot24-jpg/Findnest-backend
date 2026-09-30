@@ -54,7 +54,7 @@ class FoundItemController extends Controller
             'location_found' => 'required|string',
             'date_found' => ['required', 'date', function ($attribute, $value, $fail) {
                 $today = \Carbon\Carbon::now('Asia/Manila')->startOfDay();
-                $given = \Carbon\Carbon::parse($value)->startOfDay();
+                $given = \Carbon\Carbon::parse($value, 'Asia/Manila')->startOfDay();
                 $daysDiff = $given->diffInDays($today, false);
                 if ($given->gt($today) || $daysDiff > 2) {
                     $fail('The date must be today or within the past 2 days.');
