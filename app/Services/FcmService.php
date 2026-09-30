@@ -11,12 +11,19 @@ class FcmService
 
     public function __construct()
     {
-        $factory = (new Factory)->withServiceAccount(base_path(env('FIREBASE_CREDENTIALS')));
-        $this->messaging = $factory->createMessaging();
+        $credentials = env('FIREBASE_CREDENTIALS');
+        if ($credentials && file_exists(base_path($credentials))) {
+            $factory = (new Factory)->withServiceAccount(base_path($credentials));
+            $this->messaging = $factory->createMessaging();
+        }
     }
 
     public function sendToUser(string $fcmToken, string $title, string $body, array $data = []): void
     {
+        if (!$this->messaging) {
+            return;
+        }
+
         try {
             $message = CloudMessage::new()
                 ->toToken($fcmToken)
