@@ -360,6 +360,8 @@ class ClaimController extends Controller
             FoundItemRecord::find($match->found_id)?->update(['status' => 'claimed']);
         }
 
+        (new \App\Services\MatchScoreService())->releaseNextMatchForUser($claim->student_id);
+
         $student = \App\Models\User::find($claim->student_id);
         if ($student) {
             $trustService = new TrustScoreService();
@@ -408,6 +410,8 @@ class ClaimController extends Controller
             'admin_id' => $request->user()->id,
             'admin_notes' => $request->admin_notes,
         ]);
+
+        (new \App\Services\MatchScoreService())->releaseNextMatchForUser($claim->student_id);
 
         $student = \App\Models\User::find($claim->student_id);
         if ($student) {

@@ -112,9 +112,37 @@ class MatchScoreService
             'ip_address' => request()->ip() ?? 'system',
         ]);
 
-        if ($finalScore >= 75) {
+         if ($finalScore >= 75) {
             $this->notifyStudent($report, $found, $finalScore, $match->id);
         }
+    }
+
+    public function releaseNextMatchForUser(int $userId): void
+    {
+        $hasActive = Notification::where('user_id', $userId)
+            ->where('type', 'match')
+            ->where('is_read', false)
+            ->exists();
+
+        if ($hasActive) {
+            return;
+        }
+
+        $nextMatch = AiMatch::whereHas('lostReport', function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
+            ->where('match_status', 'pending')
+            ->whereDoesntHave('notifications')
+            ->orderByDesc('confidence_score')
+            ->orderBy('matched_at')
+            ->with(['lostReport', 'foundRecord'])
+            ->first();
+
+        if (!$nextMatch || !$nextMatch->lostReport || !$nextMatch->foundRecord) {
+            return;
+        }
+
+                $this->notifyStudent($nextMatch->lostReport, $nextMatch->foundRecord, $nextMatch->confidence_score, $nextMatch->id);
     }
 
     protected function compareDescriptions(?string $descriptionA, ?string $descriptionB): int
@@ -180,8 +208,17 @@ class MatchScoreService
         return (int) round($locationPercent);
     }
 
-    protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
+          protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
     {
+        $hasActive = Notification::where('user_id', $report->user_id)
+            ->where('type', 'match')
+            ->where('is_read', false)
+            ->exists();
+
+        if ($hasActive) {
+            return;
+        }
+
         Notification::create([
             'user_id' => $report->user_id,
             'match_id' => $matchId,

@@ -162,6 +162,7 @@ class AiMatchController extends Controller
     {
         $match = AiMatch::findOrFail($id);
         $match->update(['match_status' => 'rejected']);
+        (new \App\Services\MatchScoreService())->releaseNextMatchForUser($match->lostReport->user_id);
 
         LostItemReport::find($match->report_id)?->update(['status' => 'searching']);
         FoundItemRecord::find($match->found_id)?->update(['status' => 'unclaimed']);
