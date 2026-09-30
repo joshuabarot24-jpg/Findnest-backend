@@ -141,15 +141,33 @@ class LostItemController extends Controller
     public function destroy(Request $request, $id)
     {
         $report = LostItemReport::findOrFail($id);
+        $reason = $request->input('reason');
+
+        $activeMatch = \App\Models\AiMatch::where('report_id', $report->id)
+            ->whereIn('match_status', ['pending', 'confirmed'])
+            ->first();
+
+        if ($activeMatch) {
+            $foundRecord = \App\Models\FoundItemRecord::find($activeMatch->found_id);
+            if ($foundRecord && $foundRecord->status !== 'disposed') {
+                $foundRecord->update(['status' => 'unclaimed']);
+            }
+            $activeMatch->update(['match_status' => 'rejected']);
+        }
+
+        $isStudent = $request->user()->role === 'student';
+
         $report->delete();
 
         AuditLog::create([
             'user_id' => $request->user()->id,
-            'action' => 'Lost Item Report Deleted',
+            'action' => $isStudent ? 'Lost Item Report Deleted By Student' : 'Lost Item Report Deleted',
             'target_type' => 'lost_item_reports',
             'target_id' => $id,
-            'details' => 'Report deleted for: ' . $report->item_name,
-            'performed_by' => $request->user()->name,
+            'details' => $isStudent
+                ? 'Student deleted their own lost report for "' . $report->item_name . '". Reason: ' . ($reason ?: 'No reason provided.')
+                : 'Report deleted for: ' . $report->item_name,
+            'performed_by' => ($isStudent ? 'Student: ' : '') . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
