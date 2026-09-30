@@ -33,6 +33,27 @@ class ClaimController extends Controller
             $claim->competing_claims_count = $foundId ? ($foundIdCounts[$foundId] ?? 1) : 1;
         });
 
+        $pendingByFound = $claims->filter(fn($c) => $c->claim_status === 'pending' && $c->match?->found_id)
+            ->groupBy(fn($c) => $c->match->found_id);
+
+        $hiddenClaimIds = [];
+        foreach ($pendingByFound as $foundId => $group) {
+            if ($group->count() <= 1) continue;
+            $sortedGroup = $group->sort(function ($a, $b) {
+                $aScore = $a->photo_similarity_score;
+                $bScore = $b->photo_similarity_score;
+                if ($aScore === null && $bScore === null) return $a->created_at <=> $b->created_at;
+                if ($aScore === null) return 1;
+                if ($bScore === null) return -1;
+                return ($bScore <=> $aScore) ?: ($a->created_at <=> $b->created_at);
+            })->values();
+            foreach ($sortedGroup->slice(1) as $queuedClaim) {
+                $hiddenClaimIds[] = $queuedClaim->id;
+            }
+        }
+
+        $claims = $claims->reject(fn($c) => in_array($c->id, $hiddenClaimIds))->values();
+
         $groupAnchor = [];
         foreach ($claims as $claim) {
             $foundId = $claim->match?->found_id;
@@ -358,6 +379,29 @@ class ClaimController extends Controller
             $match->update(['match_status' => 'confirmed']);
             LostItemReport::find($match->report_id)?->update(['status' => 'returned']);
             FoundItemRecord::find($match->found_id)?->update(['status' => 'claimed']);
+
+            $competingClaims = Claim::whereHas('match', function ($q) use ($match) {
+                    $q->where('found_id', $match->found_id);
+                })
+                ->where('claim_status', 'pending')
+                ->where('id', '!=', $claim->id)
+                ->get();
+
+            foreach ($competingClaims as $competing) {
+                $competing->update([
+                    'claim_status' => 'rejected',
+                    'admin_notes' => 'Automatically closed: another student\'s claim for this item was approved.',
+                ]);
+                AuditLog::create([
+                    'user_id' => $request->user()->id,
+                    'action' => 'Claim Auto-Rejected',
+                    'target_type' => 'claims',
+                    'target_id' => $competing->id,
+                    'details' => 'Claim auto-rejected because a competing claim for the same item was approved',
+                    'performed_by' => 'System: Sequential Claim Queue',
+                    'ip_address' => $request->ip(),
+                ]);
+            }
         }
 
         (new \App\Services\MatchScoreService())->releaseNextMatchForUser($claim->student_id);
