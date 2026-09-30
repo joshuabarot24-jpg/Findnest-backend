@@ -105,9 +105,11 @@ class FoundItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-                if ($record->receipt_confirmed) {
-            $matchService = new MatchScoreService();
-            $matchService->checkNewFoundRecord($record);
+        if ($record->receipt_confirmed) {
+            dispatch(function () use ($record) {
+                $matchService = new MatchScoreService();
+                $matchService->checkNewFoundRecord($record);
+            })->afterResponse();
         }
 
         return response()->json([
@@ -222,8 +224,10 @@ class FoundItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        $matchService = new MatchScoreService();
-        $matchService->checkNewFoundRecord($record);
+        dispatch(function () use ($record) {
+            $matchService = new MatchScoreService();
+            $matchService->checkNewFoundRecord($record);
+        })->afterResponse();
 
         return response()->json(['message' => 'Receipt confirmed, item is now active and matched against lost reports.', 'record' => $record]);
     }

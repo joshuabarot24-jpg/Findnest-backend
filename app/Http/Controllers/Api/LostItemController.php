@@ -98,8 +98,10 @@ class LostItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        $matchService = new MatchScoreService();
-        $matchService->checkNewLostReport($report);
+        dispatch(function () use ($report) {
+            $matchService = new MatchScoreService();
+            $matchService->checkNewLostReport($report);
+        })->afterResponse();
 
         return response()->json([
             'message' => 'Lost item report submitted successfully',
