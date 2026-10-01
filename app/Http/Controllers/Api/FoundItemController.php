@@ -6,7 +6,6 @@ use App\Models\FoundItemRecord;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Services\MatchScoreService;
 
 class FoundItemController extends Controller
 {
@@ -21,6 +20,15 @@ class FoundItemController extends Controller
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('Unclaimed check failed: ' . $e->getMessage());
             }
+        }
+
+        try {
+            \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                '--stop-when-empty' => true,
+                '--tries' => 1,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Queue processing failed: ' . $e->getMessage());
         }
 
         $records = FoundItemRecord::with('admin')
@@ -106,10 +114,7 @@ class FoundItemController extends Controller
         ]);
 
         if ($record->receipt_confirmed) {
-            dispatch(function () use ($record) {
-                $matchService = new MatchScoreService();
-                $matchService->checkNewFoundRecord($record);
-            })->afterResponse();
+            \App\Jobs\RunFoundRecordMatching::dispatch($record->id);
         }
 
         return response()->json([
@@ -224,10 +229,7 @@ class FoundItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        dispatch(function () use ($record) {
-            $matchService = new MatchScoreService();
-            $matchService->checkNewFoundRecord($record);
-        })->afterResponse();
+        \App\Jobs\RunFoundRecordMatching::dispatch($record->id);
 
         return response()->json(['message' => 'Receipt confirmed, item is now active and matched against lost reports.', 'record' => $record]);
     }
