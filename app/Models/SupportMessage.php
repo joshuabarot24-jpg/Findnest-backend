@@ -11,6 +11,8 @@ class SupportMessage extends Model
         'email',
         'message',
         'status',
+        'is_override_request',
+        'override_status',
     ];
 
     public function user()

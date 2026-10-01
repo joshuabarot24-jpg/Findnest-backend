@@ -40,6 +40,7 @@ class User extends Authenticatable
         'login_locked_until',
         'flagged_for_review',
         'flag_reason',
+        'manual_override_granted',
         'identity_verification_status',
     ];
 
