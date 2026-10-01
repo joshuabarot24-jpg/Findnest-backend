@@ -91,9 +91,23 @@ class AuthController extends Controller
                 ->whereIn('role', ['super_admin', 'admin'])
                 ->first();
 
-            if (!$user || !Hash::check($request->password, $user->password)) {
+            if (!$user) {
                 return response()->json(['message' => 'Invalid credentials'], 401);
             }
+
+            if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
+                return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+            }
+
+            if (!Hash::check($request->password, $user->password)) {
+                $user->increment('failed_login_attempts');
+                if ($user->failed_login_attempts >= 5) {
+                    $user->update(['login_locked_until' => now()->addMinutes(15)]);
+                }
+                return response()->json(['message' => 'Invalid credentials'], 401);
+            }
+
+            $user->update(['failed_login_attempts' => 0, 'login_locked_until' => null]);
 
             if (!$user->is_active) {
                 return response()->json(['message' => 'Account is deactivated'], 403);
@@ -134,9 +148,23 @@ class AuthController extends Controller
             ->where('role', 'student')
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
+
+        if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
+            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            $user->increment('failed_login_attempts');
+            if ($user->failed_login_attempts >= 5) {
+                $user->update(['login_locked_until' => now()->addMinutes(15)]);
+            }
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        $user->update(['failed_login_attempts' => 0, 'login_locked_until' => null]);
 
         if (!$user->is_active) {
             return response()->json(['message' => 'Account is deactivated'], 403);
@@ -196,9 +224,23 @@ class AuthController extends Controller
             ->where('role', 'admin')
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
+
+        if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
+            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            $user->increment('failed_login_attempts');
+            if ($user->failed_login_attempts >= 5) {
+                $user->update(['login_locked_until' => now()->addMinutes(15)]);
+            }
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        $user->update(['failed_login_attempts' => 0, 'login_locked_until' => null]);
 
         if (!$user->is_active) {
             return response()->json(['message' => 'Account is deactivated'], 403);
@@ -253,9 +295,23 @@ class AuthController extends Controller
             ->where('role', 'student')
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
+
+        if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
+            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            $user->increment('failed_login_attempts');
+            if ($user->failed_login_attempts >= 5) {
+                $user->update(['login_locked_until' => now()->addMinutes(15)]);
+            }
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        $user->update(['failed_login_attempts' => 0, 'login_locked_until' => null]);
 
         if (!$user->is_active) {
             return response()->json(['message' => 'Account is deactivated'], 403);

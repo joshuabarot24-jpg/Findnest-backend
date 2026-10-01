@@ -36,6 +36,8 @@ class User extends Authenticatable
         'id_photo_url',
         'id_extracted_name',
         'id_extracted_school_id',
+        'failed_login_attempts',
+        'login_locked_until',
         'identity_verification_status',
     ];
 
