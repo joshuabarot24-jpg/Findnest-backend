@@ -61,7 +61,7 @@ class FoundItemController extends Controller
             'category' => 'required|string',
             'description' => 'nullable|string',
             'ai_description' => 'nullable|string',
-            'location_found' => 'required|string',
+            'location_found' => $request->status === 'others' ? 'nullable|string' : 'required|string',
             'date_found' => ['required', 'date', function ($attribute, $value, $fail) {
                 $today = \Carbon\Carbon::now('Asia/Manila')->startOfDay();
                 $given = \Carbon\Carbon::parse($value, 'Asia/Manila')->startOfDay();
@@ -91,7 +91,7 @@ class FoundItemController extends Controller
             'category' => $request->category,
             'description' => $request->description,
             'ai_description' => $request->ai_description,
-            'location_found' => $request->location_found,
+           'location_found' => $request->location_found ?: null,
             'receipt_confirmed' => !$isStudent,
             'receipt_confirmed_at' => !$isStudent ? now() : null,
             'surrender_deadline' => $isStudent ? now()->addDays(2) : null,
@@ -110,7 +110,7 @@ class FoundItemController extends Controller
             'action' => 'Found Item Recorded',
             'target_type' => 'found_item_records',
             'target_id' => $record->id,
-            'details' => 'Admin recorded found item: ' . $record->item_name . ' at ' . $record->location_found,
+           'details' => 'Admin recorded found item: ' . $record->item_name . ($record->location_found ? ' at ' . $record->location_found : ' (school inventory item)'),
             'performed_by' => 'Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
