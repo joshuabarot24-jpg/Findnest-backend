@@ -23,10 +23,12 @@ class FoundItemController extends Controller
         }
 
         try {
-            \Illuminate\Support\Facades\Artisan::call('queue:work', [
-                '--stop-when-empty' => true,
-                '--tries' => 1,
-            ]);
+            if (\DB::table('jobs')->exists()) {
+                \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    '--stop-when-empty' => true,
+                    '--tries' => 1,
+                ]);
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Queue processing failed: ' . $e->getMessage());
         }
