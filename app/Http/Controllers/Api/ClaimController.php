@@ -502,6 +502,25 @@ class ClaimController extends Controller
                 'admin_notes' => $request->resolution_notes ?? $claim->admin_notes,
             ]);
 
+            $student = \App\Models\User::find($claim->student_id);
+            if ($student) {
+                $priorFlagReason = $student->flag_reason ? $student->flag_reason . ' | ' : '';
+                $student->update([
+                    'flagged_for_review' => true,
+                    'flag_reason' => $priorFlagReason . 'Claim #' . $claim->id . ' rejected and appeal upheld on ' . Carbon::now()->toDateString(),
+                ]);
+
+                AuditLog::create([
+                    'user_id' => $request->user()->id,
+                    'action' => 'Student Flagged For Review',
+                    'target_type' => 'users',
+                    'target_id' => $student->id,
+                    'details' => 'Student flagged after claim #' . $claim->id . ' was rejected and the appeal was also upheld as rejected',
+                    'performed_by' => 'System: Claim Appeal Resolution',
+                    'ip_address' => $request->ip(),
+                ]);
+            }
+
             Notification::create([
                 'user_id' => $claim->student_id,
                 'match_id' => $claim->match_id,

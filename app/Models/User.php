@@ -38,6 +38,8 @@ class User extends Authenticatable
         'id_extracted_school_id',
         'failed_login_attempts',
         'login_locked_until',
+        'flagged_for_review',
+        'flag_reason',
         'identity_verification_status',
     ];
 
@@ -59,6 +61,7 @@ class User extends Authenticatable
         'password_last_changed_at' => 'datetime',
         'password_change_approved' => 'boolean',
         'id_verified' => 'boolean',
+        'flagged_for_review' => 'boolean',
     ];
 
     public function lostReports()
