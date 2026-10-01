@@ -13,7 +13,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use App\Services\FcmService;
-use App\Services\OwnershipQuestionService;
 use App\Services\TrustScoreService;
 
 class ClaimController extends Controller
@@ -152,64 +151,11 @@ class ClaimController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        if ($request->proof_photo_url) {
-            $match = AiMatch::with('foundRecord')->find($request->match_id);
-            $foundPhotoUrl = $match?->foundRecord?->photo_url;
-
-            if ($foundPhotoUrl) {
-                $matchService = new \App\Services\MatchScoreService();
-                $photoScore = $matchService->compareClaimPhotos($request->proof_photo_url, $foundPhotoUrl);
-
-                if ($photoScore !== null) {
-                    $claim->update(['photo_similarity_score' => $photoScore]);
-
-                    AuditLog::create([
-                        'user_id' => $request->user()->id,
-                        'action' => 'Claim Photo Similarity Scored',
-                        'target_type' => 'claims',
-                        'target_id' => $claim->id,
-                        'details' => 'AI compared claimant evidence photo against found item photo: ' . $photoScore . '% similarity',
-                        'performed_by' => 'System: AI Matching Engine',
-                        'ip_address' => $request->ip(),
-                    ]);
-                }
-            }
-        }
-
-        $questionService = new OwnershipQuestionService();
-        $questionResult = $questionService->generateQuestions($claim);
-
-        if ($questionResult['status'] === 'generated') {
-            AuditLog::create([
-                'user_id' => $request->user()->id,
-                'action' => 'Ownership Questions Generated',
-                'target_type' => 'claims',
-                'target_id' => $claim->id,
-                'details' => 'AI generated ownership verification questions for this claim',
-                'performed_by' => 'System: AI Engine',
-                'ip_address' => $request->ip(),
-            ]);
-        } elseif ($questionResult['status'] === 'skipped') {
-            $claim->update([
-                'verification_skipped' => true,
-                'verification_skip_reason' => $questionResult['reason'],
-            ]);
-
-            AuditLog::create([
-                'user_id' => $request->user()->id,
-                'action' => 'Ownership Questions Skipped',
-                'target_type' => 'claims',
-                'target_id' => $claim->id,
-                'details' => 'AI determined this item has no distinguishing features to verify: ' . $questionResult['reason'],
-                'performed_by' => 'System: AI Engine',
-                'ip_address' => $request->ip(),
-            ]);
-        }
+        \App\Jobs\RunClaimPostProcessing::dispatch($claim->id);
 
         return response()->json([
             'message' => 'Claim submitted successfully',
             'claim' => $claim,
-            'questions_generated' => $questionResult['status'] === 'generated',
         ], 201);
     }
 
