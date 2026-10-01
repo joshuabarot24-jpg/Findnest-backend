@@ -33,11 +33,16 @@ class FoundItemController extends Controller
             \Illuminate\Support\Facades\Log::error('Queue processing failed: ' . $e->getMessage());
         }
 
-        $records = FoundItemRecord::with('admin')
+        $query = FoundItemRecord::with('admin')
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->category, fn($q) => $q->where('category', $request->category))
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('created_at', 'desc');
+
+        if ($request->user()->role === 'student') {
+            $query->where('admin_id', $request->user()->id);
+        }
+
+        $records = $query->get();
 
         return response()->json(['records' => $records]);
     }
