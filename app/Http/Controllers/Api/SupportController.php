@@ -8,6 +8,7 @@ use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use App\Models\AuditLog;
 
 class SupportController extends Controller
 {
@@ -23,18 +24,75 @@ class SupportController extends Controller
 
         $user = $request->user();
 
+        $isOverrideRequest = $request->boolean('is_override_request');
+
         $message = SupportMessage::create([
             'user_id' => $user?->id,
             'name' => $user?->name ?? 'Guest',
             'email' => $user?->email ?? 'unknown@findnest.local',
             'message' => $request->message,
             'status' => 'new',
+            'is_override_request' => $isOverrideRequest,
+            'override_status' => $isOverrideRequest ? 'pending' : null,
         ]);
 
         return response()->json([
             'message' => 'Support message sent successfully',
             'data' => $message,
         ], 201);
+    }
+
+    public function resolveOverrideRequest(Request $request, $id)
+    {
+        $message = SupportMessage::findOrFail($id);
+
+        if (!$message->is_override_request) {
+            return response()->json(['message' => 'This message is not an override request.'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'decision' => 'required|in:approve,deny',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $message->update([
+            'override_status' => $request->decision === 'approve' ? 'approved' : 'denied',
+            'status' => 'responded',
+        ]);
+
+        $student = \App\Models\User::find($message->user_id);
+        if ($student) {
+            if ($request->decision === 'approve') {
+                $student->update(['manual_override_granted' => true]);
+            }
+
+            Notification::create([
+                'user_id' => $student->id,
+                'match_id' => null,
+                'title' => $request->decision === 'approve' ? 'Manual Override Approved' : 'Manual Override Request Denied',
+                'message' => $request->decision === 'approve'
+                    ? 'Your request to manually report a lost item without a clear photo has been approved. You may now submit your report, filling in all details yourself.'
+                    : 'Your manual override request was reviewed and was not approved. Please try uploading a clearer photo.',
+                'type' => 'status',
+                'is_read' => false,
+                'sent_at' => Carbon::now(),
+            ]);
+        }
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Manual Override Request ' . ($request->decision === 'approve' ? 'Approved' : 'Denied'),
+            'target_type' => 'support_messages',
+            'target_id' => $message->id,
+            'details' => 'Admin ' . $request->decision . 'd manual AI override request from ' . $message->name,
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Override request ' . $request->decision . 'd successfully', 'data' => $message]);
     }
 
     public function index()

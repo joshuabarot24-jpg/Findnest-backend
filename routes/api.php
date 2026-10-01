@@ -145,6 +145,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/read', [SupportController::class, 'markAsRead']);
             Route::get('/{id}/thread', [SupportController::class, 'getThread']);
             Route::post('/{id}/reply', [SupportController::class, 'reply']);
+            Route::post('/{id}/resolve-override', [SupportController::class, 'resolveOverrideRequest']);
         });
     });
 
