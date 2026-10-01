@@ -19,6 +19,7 @@ class LostItemReport extends Model
         'photo_url',
         'status',
         'ai_description',
+        'submitted_via_override',
     ];
 
     protected $casts = [

@@ -58,18 +58,26 @@ class MatchScoreService
             $found->ai_description ?: $found->description
         );
 
-        $photoScore = $this->comparePhotos($report->photo_url, $found->photo_url);
-
         $categoryScore = ($report->category === $found->category) ? 100 : 50;
 
         $dateScore = $this->calculateDateScore($report, $found);
         $locationScore = $this->calculateLocationScore($report, $found);
         $temporalSpatialScore = (int) round(($dateScore + $locationScore) / 2);
 
-        $baseScore = ($descriptionScore * 0.40) +
-            ($photoScore * 0.40) +
-            ($categoryScore * 0.05) +
-            ($temporalSpatialScore * 0.15);
+        $isOverrideReport = (bool) ($report->submitted_via_override ?? false);
+
+        if ($isOverrideReport) {
+            $photoScore = null;
+            $baseScore = ($descriptionScore * 0.70) +
+                ($categoryScore * 0.10) +
+                ($temporalSpatialScore * 0.20);
+        } else {
+            $photoScore = $this->comparePhotos($report->photo_url, $found->photo_url);
+            $baseScore = ($descriptionScore * 0.40) +
+                ($photoScore * 0.40) +
+                ($categoryScore * 0.05) +
+                ($temporalSpatialScore * 0.15);
+        }
 
         $bonusPoints = $this->calculateBonusPoints($report, $found);
 

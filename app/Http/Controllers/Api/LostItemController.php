@@ -85,6 +85,7 @@ class LostItemController extends Controller
             'photo_url' => $request->photo_url,
             'photo_urls' => $request->photo_urls ?? ($request->photo_url ? [$request->photo_url] : null),
             'status' => 'searching',
+            'submitted_via_override' => (bool) $request->user()->manual_override_granted,
         ]);
 
         AuditLog::create([
