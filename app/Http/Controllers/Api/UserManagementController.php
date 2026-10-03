@@ -234,6 +234,38 @@ class UserManagementController extends Controller
         ]);
     }
 
+    public function toggleManualOverride(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'manual_override_granted' => 'required|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user->update([
+            'manual_override_granted' => $request->manual_override_granted,
+        ]);
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => $request->manual_override_granted ? 'Manual Override Enabled' : 'Manual Override Disabled',
+            'target_type' => 'users',
+            'target_id' => $user->id,
+            'details' => ($request->manual_override_granted ? 'Enabled' : 'Disabled') . ' manual AI override for account: ' . $user->name,
+            'performed_by' => ($request->user()->role === 'super_admin' ? 'Super Admin: ' : 'Admin: ') . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => $request->manual_override_granted ? 'Manual override enabled' : 'Manual override disabled',
+            'user' => $user->fresh(),
+        ]);
+    }
+
     public function destroy(Request $request, $id)
     {
         $user = User::findOrFail($id);
