@@ -35,7 +35,7 @@ class AuditLogController extends Controller
             })
             ->when($request->user_id, fn($q) => $q->where('user_id', $request->user_id))
             ->orderBy('created_at', $sortDirection)
-            ->paginate(50);
+            ->paginate(5);
 
         return response()->json(['logs' => $logs]);
     }
