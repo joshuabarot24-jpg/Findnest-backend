@@ -21,7 +21,7 @@ class ProfileController extends Controller
 
         if ($user->role === 'student') {
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email|unique:users,email,' . $user->id,
+                'email' => ['required', 'email', 'unique:users,email,' . $user->id, new \App\Rules\GmailOnly($user->email)],
             ]);
 
             if ($validator->fails()) {

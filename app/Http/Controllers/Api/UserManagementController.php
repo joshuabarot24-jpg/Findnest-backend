@@ -21,7 +21,7 @@ class UserManagementController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            'email' => ['required', 'email', 'unique:users,email', new \App\Rules\GmailOnly()],
             'password' => 'required|string|min:8',
             'role' => 'required|in:super_admin,admin,student',
             'school_id' => 'nullable|string|unique:users,school_id',
@@ -81,7 +81,7 @@ class UserManagementController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $id,
+            'email' => ['required', 'email', 'unique:users,email,' . $id, new \App\Rules\GmailOnly($user->email)],
             'password' => 'nullable|string|min:8|max:50',
             'role' => 'required|in:super_admin,admin,student',
             'school_id' => 'nullable|string|unique:users,school_id,' . $id,
