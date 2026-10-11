@@ -83,7 +83,8 @@ class MatchScoreService
 
         $finalScore = min(100, round($baseScore + $bonusPoints));
 
-        $threshold = (int) \App\Models\SystemSetting::get('match_confidence_threshold', 75);
+        // [Sec] Fixed match threshold: not configurable from the UI.
+        $threshold = 75;
         $matchStatus = $finalScore < $threshold ? null : 'pending';
 
         if ($matchStatus === null) {
