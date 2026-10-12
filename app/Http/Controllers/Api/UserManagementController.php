@@ -167,38 +167,55 @@ class UserManagementController extends Controller
 
     // Restores an archived account. A new password is required and is marked temporary,
     // so the person must set their own at first login.
+        // Restores an archived account.
+    // Students: a new password is required and is marked temporary (they must replace it at first login).
+    // Admins: the existing password is kept; the account is simply reactivated.
     public function restore(Request $request, $id)
     {
         $user = User::findOrFail($id);
+        $isStudent = $user->role === 'student';
 
-        $validator = Validator::make($request->all(), [
-            'new_password' => ['required', 'string', new \App\Rules\StrongPassword()],
-        ]);
+        if ($isStudent) {
+            $validator = Validator::make($request->all(), [
+                'new_password' => ['required', 'string', new \App\Rules\StrongPassword()],
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
         }
 
-        $user->update([
+        $updates = [
             'is_active' => true,
-            'password' => Hash::make($request->new_password),
             'failed_login_attempts' => 0,
             'login_locked_until' => null,
             'restored_at' => now(),
-        ]);
-        $user->forceFill(['password_is_temporary' => true])->save();
+        ];
+        if ($isStudent) {
+            $updates['password'] = Hash::make($request->new_password);
+        }
+        $user->update($updates);
+
+        if ($isStudent) {
+            $user->forceFill(['password_is_temporary' => true])->save();
+        }
 
         AuditLog::create([
             'user_id' => $request->user()->id,
             'action' => 'User Restored',
             'target_type' => 'users',
             'target_id' => $user->id,
-            'details' => 'Archived account restored with a new temporary password: ' . $user->name,
+            'details' => $isStudent
+                ? 'Archived account restored with a new temporary password: ' . $user->name
+                : 'Archived account restored: ' . $user->name,
             'performed_by' => 'Super Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        return response()->json(['message' => 'Account restored. Give the new password to the user.', 'user' => $user->fresh()]);
+        return response()->json([
+            'message' => $isStudent ? 'Account restored. Give the new password to the user.' : 'Account restored.',
+            'user' => $user->fresh(),
+        ]);
     }
 
     public function approvePasswordChange(Request $request, $id)
