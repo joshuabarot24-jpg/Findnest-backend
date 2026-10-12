@@ -144,7 +144,8 @@ class UserManagementController extends Controller
     public function revoke(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        $user->update(['is_active' => false]);
+        // Archiving clears the restored marker, so the account leaves the Restored tab
+        $user->update(['is_active' => false, 'restored_at' => null]);
 
         AuditLog::create([
             'user_id' => $request->user()->id,
@@ -178,6 +179,7 @@ class UserManagementController extends Controller
             'password' => Hash::make($request->new_password),
             'failed_login_attempts' => 0,
             'login_locked_until' => null,
+            'restored_at' => now(),
         ]);
         $user->forceFill(['password_is_temporary' => true])->save();
 

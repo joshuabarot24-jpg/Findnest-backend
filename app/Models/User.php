@@ -41,6 +41,7 @@ class User extends Authenticatable
         'flagged_for_review',
         'flag_reason',
         'manual_override_granted',
+        'restored_at',
         'identity_verification_status',
     ];
 
@@ -63,6 +64,7 @@ class User extends Authenticatable
         'password_change_approved' => 'boolean',
         'id_verified' => 'boolean',
         'flagged_for_review' => 'boolean',
+        'restored_at' => 'datetime',
     ];
 
     public function lostReports()
