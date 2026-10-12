@@ -475,7 +475,7 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'token' => 'required|string',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => ['required', 'string', new \App\Rules\StrongPassword(), 'confirmed'],
         ]);
 
         if ($validator->fails()) {
@@ -503,7 +503,16 @@ class AuthController extends Controller
             return response()->json(['message' => 'User not found.'], 404);
         }
 
-        $user->update(['password' => Hash::make($request->password)]);
+        if (!$user->is_active) {
+            return response()->json(['message' => 'This account is archived. Please contact the Super Admin.'], 403);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->password),
+            'failed_login_attempts' => 0,
+            'login_locked_until' => null,
+        ]);
+        $user->forceFill(['password_is_temporary' => false])->save();
 
         \DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 
