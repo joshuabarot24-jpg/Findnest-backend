@@ -545,7 +545,9 @@ class AuthController extends Controller
             ['token' => hash('sha256', $token), 'created_at' => now()]
         );
 
-        $resetUrl = "http://localhost:3000/reset-password?token={$token}&email=" . urlencode($user->email);
+        // [Fix] Reset link must point to the live website, not localhost. Set FRONTEND_URL to override (e.g. local testing).
+        $frontendUrl = rtrim(env('FRONTEND_URL', 'https://findnest.org'), '/');
+        $resetUrl = $frontendUrl . "/reset-password?token={$token}&email=" . urlencode($user->email);
 
         \Mail::raw(
             "Hello {$user->name},\n\nWe received a request to reset your FindNest password. Click the link below to set a new password. This link expires in 60 minutes.\n\n{$resetUrl}\n\nIf you did not request this, please ignore this email.",
