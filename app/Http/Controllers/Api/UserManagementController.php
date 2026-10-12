@@ -148,33 +148,50 @@ class UserManagementController extends Controller
 
         AuditLog::create([
             'user_id' => $request->user()->id,
-            'action' => 'User Revoked',
+             'action' => 'User Archived',
             'target_type' => 'users',
             'target_id' => $user->id,
-            'details' => 'User access revoked: ' . $user->name,
+            'details' => 'User account archived: ' . $user->name,
             'performed_by' => 'Super Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        return response()->json(['message' => 'User revoked successfully', 'user' => $user]);
+         return response()->json(['message' => 'User archived successfully', 'user' => $user]);
     }
 
+    // Restores an archived account. A new password is required and is marked temporary,
+    // so the person must set their own at first login.
     public function restore(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        $user->update(['is_active' => true]);
+
+        $validator = Validator::make($request->all(), [
+            'new_password' => ['required', 'string', new \App\Rules\StrongPassword()],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user->update([
+            'is_active' => true,
+            'password' => Hash::make($request->new_password),
+            'failed_login_attempts' => 0,
+            'login_locked_until' => null,
+        ]);
+        $user->forceFill(['password_is_temporary' => true])->save();
 
         AuditLog::create([
             'user_id' => $request->user()->id,
             'action' => 'User Restored',
             'target_type' => 'users',
             'target_id' => $user->id,
-            'details' => 'User access restored: ' . $user->name,
+            'details' => 'Archived account restored with a new temporary password: ' . $user->name,
             'performed_by' => 'Super Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        return response()->json(['message' => 'User restored successfully', 'user' => $user]);
+        return response()->json(['message' => 'Account restored. Give the new password to the user.', 'user' => $user->fresh()]);
     }
 
     public function approvePasswordChange(Request $request, $id)

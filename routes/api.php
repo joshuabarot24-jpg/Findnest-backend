@@ -122,13 +122,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [UserManagementController::class, 'index']);
         Route::post('/', [UserManagementController::class, 'store']);
         Route::put('/{id}', [UserManagementController::class, 'update']);
+                // [Sec] Accounts are archived (revoke route = archive) and can be restored with a new password; deleting is not allowed.
         Route::post('/{id}/revoke', [UserManagementController::class, 'revoke']);
         Route::post('/{id}/restore', [UserManagementController::class, 'restore']);
         Route::post('/{id}/approve-password-change', [UserManagementController::class, 'approvePasswordChange']);
         Route::post('/{id}/toggle-restriction', [UserManagementController::class, 'toggleRestriction']);
         Route::post('/{id}/toggle-manual-override', [UserManagementController::class, 'toggleManualOverride']);
-        Route::delete('/{id}', [UserManagementController::class, 'destroy']);
-        
+
     });
 
     Route::prefix('case-trail')->middleware('admin.privilege:digital_records')->group(function () {
