@@ -144,6 +144,11 @@ class UserManagementController extends Controller
     public function revoke(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        // [Sec] The Super Admin account can never be archived (it would lock everyone out of management).
+        if ($user->role === 'super_admin') {
+            return response()->json(['message' => 'The Super Admin account cannot be archived.'], 403);
+        }
         // Archiving clears the restored marker, so the account leaves the Restored tab
         $user->update(['is_active' => false, 'restored_at' => null]);
 
