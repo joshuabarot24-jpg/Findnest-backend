@@ -4,27 +4,31 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\AuditLog;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
-use Carbon\Carbon;
 use App\Models\LostItemReport;
 use App\Models\FoundItemRecord;
 use App\Models\Claim;
+use App\Rules\GmailOnly;
+use App\Rules\StrongPassword;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+
 class UserManagementController extends Controller
-    {
+{
+    // Lists every account (the web pages filter by role)
     public function index()
     {
         $users = User::orderBy('created_at', 'desc')->get();
         return response()->json(['users' => $users]);
     }
 
-   public function store(Request $request)
+    // Creates an account. Emails must be Gmail; passwords follow the standard.
+    public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => ['required', 'email', 'unique:users,email', new \App\Rules\GmailOnly()],
-            'password' => ['required', 'string', new \App\Rules\StrongPassword()],
+            'email' => ['required', 'email', 'unique:users,email', new GmailOnly()],
+            'password' => ['required', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
             'school_id' => 'nullable|string|unique:users,school_id',
             'course' => 'nullable|string',
@@ -57,6 +61,7 @@ class UserManagementController extends Controller
             'trust_score' => 100,
         ]);
 
+        // A new student gets a temporary password and must replace it at first login
         if ($user->role === 'student') {
             $user->forceFill(['password_is_temporary' => true])->save();
         }
@@ -77,14 +82,15 @@ class UserManagementController extends Controller
         ], 201);
     }
 
+    // Updates an account. The email is only checked again when it changes.
     public function update(Request $request, $id)
     {
         $user = User::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => ['required', 'email', 'unique:users,email,' . $id, new \App\Rules\GmailOnly($user->email)],
-            'password' => ['nullable', 'string', new \App\Rules\StrongPassword()],
+            'email' => ['required', 'email', 'unique:users,email,' . $id, new GmailOnly($user->email)],
+            'password' => ['nullable', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
             'school_id' => 'nullable|string|unique:users,school_id,' . $id,
             'course' => 'nullable|string',
@@ -114,7 +120,8 @@ class UserManagementController extends Controller
             'restricted_until' => $request->restricted_until,
         ]);
 
-                if ($request->password) {
+        // A password set here is temporary for students (they must replace it at first login)
+        if ($request->password) {
             $user->update(['password' => Hash::make($request->password)]);
 
             if ($user->role === 'student') {
@@ -143,6 +150,7 @@ class UserManagementController extends Controller
         ]);
     }
 
+    // Archives an account (route name kept as "revoke"). Nothing is deleted.
     public function revoke(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -151,12 +159,13 @@ class UserManagementController extends Controller
         if ($user->role === 'super_admin') {
             return response()->json(['message' => 'The Super Admin account cannot be archived.'], 403);
         }
+
         // Archiving clears the restored marker, so the account leaves the Restored tab
         $user->update(['is_active' => false, 'restored_at' => null]);
 
         AuditLog::create([
             'user_id' => $request->user()->id,
-             'action' => 'User Archived',
+            'action' => 'User Archived',
             'target_type' => 'users',
             'target_id' => $user->id,
             'details' => 'User account archived: ' . $user->name,
@@ -164,12 +173,10 @@ class UserManagementController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-         return response()->json(['message' => 'User archived successfully', 'user' => $user]);
+        return response()->json(['message' => 'User archived successfully', 'user' => $user]);
     }
 
-    // Restores an archived account. A new password is required and is marked temporary,
-    // so the person must set their own at first login.
-        // Restores an archived account.
+    // Restores an archived account.
     // Students: a new password is required and is marked temporary (they must replace it at first login).
     // Admins: the existing password is kept; the account is simply reactivated.
     public function restore(Request $request, $id)
@@ -179,7 +186,7 @@ class UserManagementController extends Controller
 
         if ($isStudent) {
             $validator = Validator::make($request->all(), [
-                'new_password' => ['required', 'string', new \App\Rules\StrongPassword()],
+                'new_password' => ['required', 'string', new StrongPassword()],
             ]);
 
             if ($validator->fails()) {
@@ -220,6 +227,7 @@ class UserManagementController extends Controller
         ]);
     }
 
+    // Approves a student's password change request
     public function approvePasswordChange(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -279,6 +287,7 @@ class UserManagementController extends Controller
         ]);
     }
 
+    // Restricts or un-restricts an account
     public function toggleRestriction(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -311,6 +320,7 @@ class UserManagementController extends Controller
         ]);
     }
 
+    // Turns the Manual AI Override on or off for a student
     public function toggleManualOverride(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -342,64 +352,4 @@ class UserManagementController extends Controller
             'user' => $user->fresh(),
         ]);
     }
-
-    public function destroy(Request $request, $id)
-    {
-        $user = User::findOrFail($id);
-
-        if ($user->role !== 'student') {
-            return response()->json(['message' => 'Only student accounts can be deleted this way.'], 403);
-        }
-
-        if ($user->is_active) {
-            return response()->json(['message' => 'This account must be revoked before it can be permanently deleted.'], 422);
-        }
-
-        $name = $user->name;
-
-        \App\Models\OwnershipQuestion::whereIn('claim_id', \App\Models\Claim::where('student_id', $user->id)->pluck('id'))->delete();
-        \App\Models\Claim::where('student_id', $user->id)->delete();
-        \App\Models\AiMatch::whereIn('report_id', \App\Models\LostItemReport::where('user_id', $user->id)->pluck('id'))->delete();
-        \App\Models\LostItemReport::where('user_id', $user->id)->delete();
-        \App\Models\Notification::where('user_id', $user->id)->delete();
-        \App\Models\SupportReply::where('user_id', $user->id)->delete();
-        \App\Models\SupportMessage::where('user_id', $user->id)->delete();
-
-        $user->delete();
-
-        AuditLog::create([
-            'user_id' => $request->user()->id,
-            'action' => 'Student Account Permanently Deleted',
-            'target_type' => 'users',
-            'target_id' => $id,
-            'details' => 'Admin permanently deleted revoked student account: ' . $name,
-            'performed_by' => 'Admin: ' . $request->user()->name,
-            'ip_address' => $request->ip(),
-        ]);
-
-        return response()->json(['message' => 'Student account permanently deleted.']);
-    }
-
-    public function adjustTrustScore(Request $request, $id)
-    {
-        $validator = Validator::make($request->all(), [
-            'points' => 'required|integer|min:-100|max:100',
-            'reason' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $user = User::findOrFail($id);
-        if ($user->role !== 'student') {
-            return response()->json(['message' => 'Trust score only applies to student accounts.'], 403);
-        }
-
-        $trustService = new \App\Services\TrustScoreService();
-        $trustService->adjustScore($user, (int) $request->points, 'Manual adjustment by Super Admin: ' . $request->reason);
-
-        return response()->json(['message' => 'Trust score updated successfully', 'user' => $user->fresh()]);
-    }
-
 }
