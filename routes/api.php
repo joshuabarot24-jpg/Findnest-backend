@@ -128,6 +128,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/approve-password-change', [UserManagementController::class, 'approvePasswordChange']);
         Route::post('/{id}/toggle-restriction', [UserManagementController::class, 'toggleRestriction']);
         Route::post('/{id}/toggle-manual-override', [UserManagementController::class, 'toggleManualOverride']);
+        Route::get('/{id}/activity', [UserManagementController::class, 'activity']);
 
     });
 

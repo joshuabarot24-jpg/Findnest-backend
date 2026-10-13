@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
-
+use App\Models\LostItemReport;
+use App\Models\FoundItemRecord;
+use App\Models\Claim;
 class UserManagementController extends Controller
     {
     public function index()
@@ -241,6 +243,40 @@ class UserManagementController extends Controller
         ]);
 
         return response()->json(['message' => 'Password change approved. The student can now set a new password.', 'user' => $user]);
+    }
+
+    // Read-only overview of what a student has posted (lost reports, found reports, claims).
+    // Admin and Super Admin only; works for archived students too.
+    public function activity(Request $request, $id)
+    {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $student = User::where('id', $id)->where('role', 'student')->first();
+        if (!$student) {
+            return response()->json(['message' => 'Student not found.'], 404);
+        }
+
+        $lost = LostItemReport::where('user_id', $student->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $found = FoundItemRecord::where('admin_id', $student->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $claims = Claim::where('student_id', $student->id)
+            ->with(['match.foundRecord', 'match.lostReport'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'student' => ['id' => $student->id, 'name' => $student->name],
+            'lost_reports' => $lost,
+            'found_reports' => $found,
+            'claims' => $claims,
+        ]);
     }
 
     public function toggleRestriction(Request $request, $id)
