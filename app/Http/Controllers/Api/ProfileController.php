@@ -66,6 +66,33 @@ class ProfileController extends Controller
         ]);
     }
 
+    // Saves the student's profile photo (already uploaded through /upload/image, folder "profiles")
+    public function updatePhoto(Request $request)
+    {
+        $user = $request->user();
+
+        $validator = Validator::make($request->all(), [
+            'photo_url' => ['required', 'string', 'max:500', 'starts_with:https://res.cloudinary.com/'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user->forceFill(['profile_photo_url' => $request->photo_url])->save();
+
+        return response()->json(['message' => 'Profile photo updated.', 'user' => $user->fresh()]);
+    }
+
+    // Removes the profile photo; the initial letter shows again
+    public function removePhoto(Request $request)
+    {
+        $user = $request->user();
+        $user->forceFill(['profile_photo_url' => null])->save();
+
+        return response()->json(['message' => 'Profile photo removed.', 'user' => $user->fresh()]);
+    }
+
     public function changePassword(Request $request)
     {
         $user = $request->user();

@@ -43,6 +43,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/request-password-change', [ProfileController::class, 'requestPasswordChange']);
         Route::post('/set-new-password', [ProfileController::class, 'setNewPassword']);
         Route::post('/verify-id', [ProfileController::class, 'verifyId']);
+        Route::post('/photo', [ProfileController::class, 'updatePhoto']);
+        Route::delete('/photo', [ProfileController::class, 'removePhoto']);
     });
 
     Route::prefix('lost-items')->group(function () {
