@@ -27,7 +27,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY . .
 
 # Install PHP dependencies without dev packages
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-source
 
 # Set proper permissions for Laravel cache and storage
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
