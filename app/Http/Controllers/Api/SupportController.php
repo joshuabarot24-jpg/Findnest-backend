@@ -97,7 +97,8 @@ class SupportController extends Controller
 
     public function index()
     {
-        $messages = SupportMessage::orderBy('created_at', 'desc')->get();
+        // Loads only the sender's id and photo, so nothing else about the user is exposed
+        $messages = SupportMessage::with('user:id,profile_photo_url')->orderBy('created_at', 'desc')->get();
         return response()->json(['messages' => $messages]);
     }
 
@@ -130,7 +131,7 @@ class SupportController extends Controller
             ->get();
 
         return response()->json([
-            'original' => $message,
+            'original' => $message->load('user:id,profile_photo_url'),
             'replies' => $replies,
         ]);
     }
