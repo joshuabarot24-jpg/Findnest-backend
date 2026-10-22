@@ -392,12 +392,8 @@ class MatchScoreService
 
     protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
     {
-        $hasActive = Notification::where('user_id', $report->user_id)
-            ->where('type', 'match')
-            ->where('is_read', false)
-            ->exists();
-
-        if ($hasActive) {
+        // Every match gets its own notification. Only skip if this exact match already has one.
+        if (Notification::where('match_id', $matchId)->where('type', 'match')->exists()) {
             return;
         }
 
