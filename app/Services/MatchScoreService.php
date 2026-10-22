@@ -7,6 +7,8 @@ use App\Models\AiMatch;
 use App\Models\Notification;
 use App\Models\AuditLog;
 use App\Services\FcmService;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -16,8 +18,11 @@ class MatchScoreService
     protected $apiKey;
     protected $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent';
 
-    // How many candidates get the slow AI comparison, best quick scores first
+    // How many candidates get the AI comparison, best quick scores first
     private const MAX_CANDIDATES = 10;
+
+    // Small photos downloaded once per run and reused across candidate pairs
+    private array $photoCache = [];
 
     public function __construct()
     {
@@ -41,9 +46,11 @@ class MatchScoreService
         }
         usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
+        $pairs = [];
         foreach (array_slice($scored, 0, self::MAX_CANDIDATES) as $row) {
-            $this->evaluatePair($report, $row['model']);
+            $pairs[] = [$report, $row['model']];
         }
+        $this->evaluateBatch($pairs);
     }
 
     public function checkNewFoundRecord(FoundItemRecord $found)
@@ -54,113 +61,256 @@ class MatchScoreService
         }
         usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
+        $pairs = [];
         foreach (array_slice($scored, 0, self::MAX_CANDIDATES) as $row) {
-            $this->evaluatePair($row['model'], $found);
+            $pairs[] = [$row['model'], $found];
+        }
+        $this->evaluateBatch($pairs);
+    }
+
+    // Scores all candidate pairs together: cheap checks, then one round of description calls,
+    // then one round of photo calls, then the matches are saved
+    protected function evaluateBatch(array $pairs): void
+    {
+        // 1. Cheap checks and the early gate (no AI calls)
+        $work = [];
+        foreach ($pairs as [$report, $found]) {
+            if ($report->user_id === $found->admin_id) {
+                continue;
+            }
+
+            $exists = AiMatch::where('report_id', $report->id)->where('found_id', $found->id)->exists();
+            if ($exists) {
+                continue;
+            }
+
+            $categoryScore = ($report->category === $found->category) ? 100 : 50;
+            $dateScore = $this->calculateDateScore($report, $found);
+            $locationScore = $this->calculateLocationScore($report, $found);
+            $temporal = (int) round(($dateScore + $locationScore) / 2);
+            $isOverride = (bool) ($report->submitted_via_override ?? false);
+            $bonus = $this->calculateBonusPoints($report, $found);
+
+            // Best case if the AI scored this pair 100: skip if even that cannot reach the threshold
+            $upperBound = $isOverride
+                ? 70 + ($categoryScore * 0.10) + ($temporal * 0.20) + $bonus
+                : 80 + ($categoryScore * 0.05) + ($temporal * 0.15) + $bonus;
+            if ($upperBound < 74.5) {
+                continue;
+            }
+
+            $work[] = [
+                'report' => $report,
+                'found' => $found,
+                'category' => $categoryScore,
+                'date' => $dateScore,
+                'location' => $locationScore,
+                'temporal' => $temporal,
+                'override' => $isOverride,
+                'bonus' => $bonus,
+                'descA' => $report->ai_description ?: $report->description,
+                'descB' => $found->ai_description ?: $found->description,
+                'description' => 0,
+                'photo' => null,
+                'skip' => false,
+            ];
+        }
+
+        if (empty($work)) {
+            return;
+        }
+
+        // 2. All description comparisons at the same time
+        $descPayloads = [];
+        foreach ($work as $i => $w) {
+            if (empty($w['descA']) || empty($w['descB'])) {
+                $work[$i]['description'] = 0;
+                continue;
+            }
+            $descPayloads[$i] = $this->descriptionPayload($w['descA'], $w['descB']);
+        }
+        $descScores = $this->poolScores($descPayloads);
+        foreach ($descPayloads as $i => $payload) {
+            $score = $descScores[$i];
+            if ($score === null) {
+                // A pooled call failed: fall back to the single call with retries
+                $score = $this->compareDescriptions($work[$i]['descA'], $work[$i]['descB']);
+            }
+            $work[$i]['description'] = $score;
+        }
+
+        // 3. Photo comparisons at the same time, only for pairs that can still reach the threshold
+        $photoPayloads = [];
+        foreach ($work as $i => $w) {
+            if ($w['override']) {
+                continue;
+            }
+
+            $bestPossible = ($w['description'] * 0.40) + 40 + ($w['category'] * 0.05)
+                + ($w['temporal'] * 0.15) + $w['bonus'];
+            if ($bestPossible < 74.5) {
+                $work[$i]['skip'] = true;
+                continue;
+            }
+
+            if (empty($w['report']->photo_url) || empty($w['found']->photo_url)) {
+                $work[$i]['photo'] = 0;
+                continue;
+            }
+
+            try {
+                $photoPayloads[$i] = $this->photoPayload(
+                    $this->smallPhoto($w['report']->photo_url),
+                    $this->smallPhoto($w['found']->photo_url)
+                );
+            } catch (\Throwable $e) {
+                Log::error('Photo download exception: ' . $e->getMessage());
+                $work[$i]['photo'] = 0;
+            }
+        }
+        $photoScores = $this->poolScores($photoPayloads);
+        foreach ($photoPayloads as $i => $payload) {
+            $score = $photoScores[$i];
+            if ($score === null) {
+                $score = $this->comparePhotos($work[$i]['report']->photo_url, $work[$i]['found']->photo_url);
+            }
+            $work[$i]['photo'] = $score;
+        }
+
+        // 4. Final scores, then save the matches that reach the threshold
+        foreach ($work as $w) {
+            if ($w['skip']) {
+                continue;
+            }
+
+            $report = $w['report'];
+            $found = $w['found'];
+
+            if ($w['override']) {
+                $photoScore = null;
+                $baseScore = ($w['description'] * 0.70) +
+                    ($w['category'] * 0.10) +
+                    ($w['temporal'] * 0.20);
+            } else {
+                $photoScore = (int) ($w['photo'] ?? 0);
+                $baseScore = ($w['description'] * 0.40) +
+                    ($photoScore * 0.40) +
+                    ($w['category'] * 0.05) +
+                    ($w['temporal'] * 0.15);
+            }
+
+            $finalScore = min(100, round($baseScore + $w['bonus']));
+
+            // [Sec] Fixed match threshold: not configurable from the UI.
+            $threshold = 75;
+            if ($finalScore < $threshold) {
+                continue;
+            }
+
+            $daysSinceFound = Carbon::parse($found->created_at)->diffInDays(Carbon::parse($report->created_at));
+            $reverseEngineeringFlag = $daysSinceFound > 3;
+
+            $match = AiMatch::create([
+                'report_id' => $report->id,
+                'found_id' => $found->id,
+                'confidence_score' => $finalScore,
+                'attributes' => json_encode([
+                    'description_score' => $w['description'],
+                    'photo_score' => $photoScore,
+                    'category_score' => $w['category'],
+                    'date_score' => $w['date'],
+                    'location_score' => $w['location'],
+                ]),
+                'match_status' => 'pending',
+                'matched_at' => Carbon::now(),
+                'reverse_engineering_flag' => $reverseEngineeringFlag,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $report->user_id,
+                'action' => 'AI Match Generated',
+                'target_type' => 'ai_matches',
+                'target_id' => $match->id,
+                'details' => 'AI matched "' . $report->item_name . '" with found item "' . $found->item_name . '" at ' . $finalScore . '% confidence'
+                    . ($reverseEngineeringFlag ? ' — FLAGGED: lost report submitted ' . $daysSinceFound . ' days after found item was recorded' : ''),
+                'performed_by' => 'System: AI Matching Engine',
+                'ip_address' => request()->ip() ?? 'system',
+            ]);
+
+            if ($finalScore >= 75) {
+                $this->notifyStudent($report, $found, $finalScore, $match->id);
+            }
         }
     }
 
-    protected function evaluatePair(LostItemReport $report, FoundItemRecord $found)
+    // Sends many Gemini requests at once. Returns index => score, or null where a request failed
+    private function poolScores(array $payloads): array
     {
-        if ($report->user_id === $found->admin_id) {
-            return;
+        if (empty($payloads)) {
+            return [];
         }
 
-        $existing = AiMatch::where('report_id', $report->id)
-            ->where('found_id', $found->id)
-            ->first();
+        $url = $this->apiUrl . '?key=' . $this->apiKey;
 
-        if ($existing) {
-            return;
-        }
-
-        // Cheap scores first (no AI calls)
-        $categoryScore = ($report->category === $found->category) ? 100 : 50;
-
-        $dateScore = $this->calculateDateScore($report, $found);
-        $locationScore = $this->calculateLocationScore($report, $found);
-        $temporalSpatialScore = (int) round(($dateScore + $locationScore) / 2);
-
-        $isOverrideReport = (bool) ($report->submitted_via_override ?? false);
-        $bonusPoints = $this->calculateBonusPoints($report, $found);
-
-        // Best case if the AI scored this pair 100: if it still cannot reach the threshold,
-        // skip the pair without calling the AI at all
-        $upperBound = $isOverrideReport
-            ? 70 + ($categoryScore * 0.10) + ($temporalSpatialScore * 0.20) + $bonusPoints
-            : 80 + ($categoryScore * 0.05) + ($temporalSpatialScore * 0.15) + $bonusPoints;
-
-        if ($upperBound < 74.5) {
-            return;
-        }
-
-        $descriptionScore = $this->compareDescriptions(
-            $report->ai_description ?: $report->description,
-            $found->ai_description ?: $found->description
-        );
-
-        if ($isOverrideReport) {
-            $photoScore = null;
-            $baseScore = ($descriptionScore * 0.70) +
-                ($categoryScore * 0.10) +
-                ($temporalSpatialScore * 0.20);
-        } else {
-            // Skip the slow photo comparison when even a perfect photo score could not reach the threshold
-            $bestPossible = ($descriptionScore * 0.40) + 40 + ($categoryScore * 0.05)
-                + ($temporalSpatialScore * 0.15) + $bonusPoints;
-            if ($bestPossible < 74.5) {
-                return;
+        $responses = Http::pool(function (Pool $pool) use ($payloads, $url) {
+            $requests = [];
+            foreach ($payloads as $key => $payload) {
+                $requests[] = $pool->as((string) $key)->timeout(25)->post($url, $payload);
             }
+            return $requests;
+        });
 
-            $photoScore = $this->comparePhotos($report->photo_url, $found->photo_url);
-            $baseScore = ($descriptionScore * 0.40) +
-                ($photoScore * 0.40) +
-                ($categoryScore * 0.05) +
-                ($temporalSpatialScore * 0.15);
+        $out = [];
+        foreach ($payloads as $key => $payload) {
+            $response = $responses[(string) $key] ?? null;
+            $out[$key] = ($response instanceof Response && $response->successful())
+                ? $this->extractScore($response->json())
+                : null;
         }
+        return $out;
+    }
 
-        $finalScore = min(100, round($baseScore + $bonusPoints));
+    private function extractScore($data): ?int
+    {
+        $textResult = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        $cleanedText = trim(preg_replace('/```json\s*|\s*```/', '', $textResult));
+        $result = json_decode($cleanedText, true);
 
-        // [Sec] Fixed match threshold: not configurable from the UI.
-        $threshold = 75;
-        $matchStatus = $finalScore < $threshold ? null : 'pending';
+        return is_array($result) && isset($result['similarity_score'])
+            ? (int) $result['similarity_score']
+            : null;
+    }
 
-        if ($matchStatus === null) {
-            return;
-        }
+    private function descriptionPayload(string $descriptionA, string $descriptionB): array
+    {
+        return [
+            'contents' => [
+                [
+                    'parts' => [
+                        [
+                            'text' => "Compare these two item descriptions carefully and determine how likely they describe the SAME physical item. Weigh these factors: (1) category and type of item — must be genuinely compatible, (2) primary and secondary color — exact or very close matches score higher, (3) brand or markings if mentioned in either description, (4) material, (5) distinctive features like scratches, dents, stickers, or keychains — these are strong identity signals if they match. If key identifying details conflict (e.g. one says black, the other says white; one mentions a specific brand the other contradicts), score this significantly lower even if the general item type matches. Rate the overall similarity on a scale of 0 to 100, where 90-100 means near-certain same item, 70-89 means likely same item with minor uncertainty, 40-69 means possible but uncertain, and below 40 means unlikely to be the same item. Respond with ONLY a JSON object in this exact format, no other text: {\"similarity_score\": number from 0 to 100}\n\nDescription A: {$descriptionA}\n\nDescription B: {$descriptionB}"
+                        ]
+                    ]
+                ]
+            ]
+        ];
+    }
 
-        $daysSinceFound = Carbon::parse($found->created_at)->diffInDays(Carbon::parse($report->created_at));
-        $reverseEngineeringFlag = $daysSinceFound > 3;
-
-        $match = AiMatch::create([
-            'report_id' => $report->id,
-            'found_id' => $found->id,
-            'confidence_score' => $finalScore,
-            'attributes' => json_encode([
-                'description_score' => $descriptionScore,
-                'photo_score' => $photoScore,
-                'category_score' => $categoryScore,
-                'date_score' => $dateScore,
-                'location_score' => $locationScore,
-            ]),
-            'match_status' => $matchStatus,
-            'matched_at' => Carbon::now(),
-            'reverse_engineering_flag' => $reverseEngineeringFlag,
-        ]);
-
-        AuditLog::create([
-            'user_id' => $report->user_id,
-            'action' => 'AI Match Generated',
-            'target_type' => 'ai_matches',
-            'target_id' => $match->id,
-            'details' => 'AI matched "' . $report->item_name . '" with found item "' . $found->item_name . '" at ' . $finalScore . '% confidence'
-                . ($reverseEngineeringFlag ? ' — FLAGGED: lost report submitted ' . $daysSinceFound . ' days after found item was recorded' : ''),
-            'performed_by' => 'System: AI Matching Engine',
-            'ip_address' => request()->ip() ?? 'system',
-        ]);
-
-        if ($finalScore >= 75) {
-            $this->notifyStudent($report, $found, $finalScore, $match->id);
-        }
+    private function photoPayload(string $imageA, string $imageB): array
+    {
+        return [
+            'contents' => [
+                [
+                    'parts' => [
+                        [
+                            'text' => 'Compare these two photos carefully, one from a lost item report and one from a found item report, even if taken from different angles, distances, or lighting. Work through this systematically: (1) Identify the type of item in each photo — if they are not the same type of item, the score should be very low regardless of anything else. (2) Compare defining physical features one by one: overall shape and size, color(s), material/texture, brand markings or logos, number and placement of distinctive design elements (e.g. camera count and layout on a phone, buttons, zippers, straps, patterns). (3) Compare identifying marks: dents, scratches, cracks, stickers, tape, discoloration, or wear — these are strong evidence of the same specific item if they match, and should raise the score significantly even if the general item type is common. (4) If key features conflict (e.g. one has 3 cameras and the other has 1, or colors clearly differ), score this significantly lower even if the item category matches, since this indicates a different item, not the same one photographed differently. Only if the item itself cannot be clearly compared, secondary context clues (matching background, surroundings) may moderately raise the score, but should never make it high on their own. Respond with ONLY a JSON object in this exact format, no other text: {"similarity_score": number from 0 to 100}'
+                        ],
+                        ['inline_data' => ['mime_type' => 'image/jpeg', 'data' => $imageA]],
+                        ['inline_data' => ['mime_type' => 'image/jpeg', 'data' => $imageB]],
+                    ]
+                ]
+            ]
+        ];
     }
 
     public function releaseNextMatchForUser(int $userId): void
@@ -191,6 +341,7 @@ class MatchScoreService
         $this->notifyStudent($nextMatch->lostReport, $nextMatch->foundRecord, $nextMatch->confidence_score, $nextMatch->id);
     }
 
+    // Single description comparison with retries (used as the fallback for a failed pooled call)
     protected function compareDescriptions(?string $descriptionA, ?string $descriptionB): int
     {
         if (empty($descriptionA) || empty($descriptionB)) {
@@ -198,32 +349,17 @@ class MatchScoreService
         }
 
         try {
-            $response = Http::timeout(20)->retry(3, 500)->post($this->apiUrl . '?key=' . $this->apiKey, [
-                'contents' => [
-                    [
-                        'parts' => [
-                            [
-                                'text' => "Compare these two item descriptions carefully and determine how likely they describe the SAME physical item. Weigh these factors: (1) category and type of item — must be genuinely compatible, (2) primary and secondary color — exact or very close matches score higher, (3) brand or markings if mentioned in either description, (4) material, (5) distinctive features like scratches, dents, stickers, or keychains — these are strong identity signals if they match. If key identifying details conflict (e.g. one says black, the other says white; one mentions a specific brand the other contradicts), score this significantly lower even if the general item type matches. Rate the overall similarity on a scale of 0 to 100, where 90-100 means near-certain same item, 70-89 means likely same item with minor uncertainty, 40-69 means possible but uncertain, and below 40 means unlikely to be the same item. Respond with ONLY a JSON object in this exact format, no other text: {\"similarity_score\": number from 0 to 100}\n\nDescription A: {$descriptionA}\n\nDescription B: {$descriptionB}"
-                            ]
-                        ]
-                    ]
-                ]
-            ]);
+            $response = Http::timeout(20)->retry(3, 500)->post(
+                $this->apiUrl . '?key=' . $this->apiKey,
+                $this->descriptionPayload($descriptionA, $descriptionB)
+            );
 
             if (!$response->successful()) {
                 Log::error('Description comparison failed: ' . $response->body());
                 return 0;
             }
 
-            $data = $response->json();
-            $textResult = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-            $cleanedText = trim(preg_replace('/```json\s*|\s*```/', '', $textResult));
-
-            $result = json_decode($cleanedText, true);
-
-            return is_array($result) && isset($result['similarity_score'])
-                ? (int) $result['similarity_score']
-                : 0;
+            return $this->extractScore($response->json()) ?? 0;
         } catch (\Exception $e) {
             Log::error('Description comparison exception: ' . $e->getMessage());
             return 0;
@@ -355,27 +491,29 @@ class MatchScoreService
                 return null;
             }
 
-            $data = $response->json();
-            $textResult = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-            $cleanedText = trim(preg_replace('/```json\s*|\s*```/', '', $textResult));
-            $result = json_decode($cleanedText, true);
-
-            return is_array($result) && isset($result['similarity_score']) ? (int) $result['similarity_score'] : null;
+            return $this->extractScore($response->json());
         } catch (\Exception $e) {
             Log::error('Claim photo comparison exception: ' . $e->getMessage());
             return null;
         }
     }
 
-    // Ask Cloudinary for an 800px JPEG so the AI gets a small image, not the full photo
+    // Ask Cloudinary for an 800px JPEG, and keep it so the same photo is downloaded only once per run
     private function smallPhoto(string $url): string
     {
-        if (str_contains($url, '/upload/') && !str_contains($url, '/upload/w_')) {
-            $url = str_replace('/upload/', '/upload/w_800,q_auto,f_jpg/', $url);
+        if (isset($this->photoCache[$url])) {
+            return $this->photoCache[$url];
         }
-        return base64_encode(file_get_contents($url));
+
+        $fetchUrl = $url;
+        if (str_contains($url, '/upload/') && !str_contains($url, '/upload/w_')) {
+            $fetchUrl = str_replace('/upload/', '/upload/w_800,q_auto,f_jpg/', $url);
+        }
+
+        return $this->photoCache[$url] = base64_encode(file_get_contents($fetchUrl));
     }
 
+    // Single photo comparison with retries (used as the fallback for a failed pooled call)
     protected function comparePhotos(?string $photoUrlA, ?string $photoUrlB): int
     {
         if (empty($photoUrlA) || empty($photoUrlB)) {
@@ -383,34 +521,17 @@ class MatchScoreService
         }
 
         try {
-            $imageA = $this->smallPhoto($photoUrlA);
-            $imageB = $this->smallPhoto($photoUrlB);
-
-            $response = Http::timeout(20)->retry(3, 500)->post($this->apiUrl . '?key=' . $this->apiKey, [
-                'contents' => [
-                    [
-                        'parts' => [
-                            [
-                               'text' => 'Compare these two photos carefully, one from a lost item report and one from a found item report, even if taken from different angles, distances, or lighting. Work through this systematically: (1) Identify the type of item in each photo — if they are not the same type of item, the score should be very low regardless of anything else. (2) Compare defining physical features one by one: overall shape and size, color(s), material/texture, brand markings or logos, number and placement of distinctive design elements (e.g. camera count and layout on a phone, buttons, zippers, straps, patterns). (3) Compare identifying marks: dents, scratches, cracks, stickers, tape, discoloration, or wear — these are strong evidence of the same specific item if they match, and should raise the score significantly even if the general item type is common. (4) If key features conflict (e.g. one has 3 cameras and the other has 1, or colors clearly differ), score this significantly lower even if the item category matches, since this indicates a different item, not the same one photographed differently. Only if the item itself cannot be clearly compared, secondary context clues (matching background, surroundings) may moderately raise the score, but should never make it high on their own. Respond with ONLY a JSON object in this exact format, no other text: {"similarity_score": number from 0 to 100}'
-                            ],
-                            ['inline_data' => ['mime_type' => 'image/jpeg', 'data' => $imageA]],
-                            ['inline_data' => ['mime_type' => 'image/jpeg', 'data' => $imageB]],
-                        ]
-                    ]
-                ]
-            ]);
+            $response = Http::timeout(20)->retry(3, 500)->post(
+                $this->apiUrl . '?key=' . $this->apiKey,
+                $this->photoPayload($this->smallPhoto($photoUrlA), $this->smallPhoto($photoUrlB))
+            );
 
             if (!$response->successful()) {
                 Log::error('Photo comparison failed: ' . $response->body());
                 return 0;
             }
 
-            $data = $response->json();
-            $textResult = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-            $cleanedText = trim(preg_replace('/```json\s*|\s*```/', '', $textResult));
-            $result = json_decode($cleanedText, true);
-
-            return is_array($result) && isset($result['similarity_score']) ? (int) $result['similarity_score'] : 0;
+            return $this->extractScore($response->json()) ?? 0;
         } catch (\Exception $e) {
             Log::error('Photo comparison exception: ' . $e->getMessage());
             return 0;
