@@ -16,26 +16,46 @@ class MatchScoreService
     protected $apiKey;
     protected $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent';
 
+    // How many candidates get the slow AI comparison, best quick scores first
+    private const MAX_CANDIDATES = 10;
+
     public function __construct()
     {
         $this->apiKey = env('GEMINI_API_KEY');
     }
 
+    // Cheap score with no AI: category, date, location and bonus points only
+    private function quickScore(LostItemReport $report, FoundItemRecord $found): int
+    {
+        $category = ($report->category === $found->category) ? 100 : 50;
+        $temporal = (int) round(($this->calculateDateScore($report, $found) + $this->calculateLocationScore($report, $found)) / 2);
+
+        return (int) round($category * 0.05 + $temporal * 0.15 + $this->calculateBonusPoints($report, $found));
+    }
+
     public function checkNewLostReport(LostItemReport $report)
     {
-        $candidates = FoundItemRecord::where('status', 'unclaimed')->get();
+        $scored = [];
+        foreach (FoundItemRecord::where('status', 'unclaimed')->get() as $found) {
+            $scored[] = ['model' => $found, 'score' => $this->quickScore($report, $found)];
+        }
+        usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        foreach ($candidates as $found) {
-            $this->evaluatePair($report, $found);
+        foreach (array_slice($scored, 0, self::MAX_CANDIDATES) as $row) {
+            $this->evaluatePair($report, $row['model']);
         }
     }
 
     public function checkNewFoundRecord(FoundItemRecord $found)
     {
-        $candidates = LostItemReport::where('status', 'searching')->get();
+        $scored = [];
+        foreach (LostItemReport::where('status', 'searching')->get() as $report) {
+            $scored[] = ['model' => $report, 'score' => $this->quickScore($report, $found)];
+        }
+        usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        foreach ($candidates as $report) {
-            $this->evaluatePair($report, $found);
+        foreach (array_slice($scored, 0, self::MAX_CANDIDATES) as $row) {
+            $this->evaluatePair($row['model'], $found);
         }
     }
 
@@ -53,11 +73,7 @@ class MatchScoreService
             return;
         }
 
-        $descriptionScore = $this->compareDescriptions(
-            $report->ai_description ?: $report->description,
-            $found->ai_description ?: $found->description
-        );
-
+        // Cheap scores first (no AI calls)
         $categoryScore = ($report->category === $found->category) ? 100 : 50;
 
         $dateScore = $this->calculateDateScore($report, $found);
@@ -65,6 +81,22 @@ class MatchScoreService
         $temporalSpatialScore = (int) round(($dateScore + $locationScore) / 2);
 
         $isOverrideReport = (bool) ($report->submitted_via_override ?? false);
+        $bonusPoints = $this->calculateBonusPoints($report, $found);
+
+        // Best case if the AI scored this pair 100: if it still cannot reach the threshold,
+        // skip the pair without calling the AI at all
+        $upperBound = $isOverrideReport
+            ? 70 + ($categoryScore * 0.10) + ($temporalSpatialScore * 0.20) + $bonusPoints
+            : 80 + ($categoryScore * 0.05) + ($temporalSpatialScore * 0.15) + $bonusPoints;
+
+        if ($upperBound < 74.5) {
+            return;
+        }
+
+        $descriptionScore = $this->compareDescriptions(
+            $report->ai_description ?: $report->description,
+            $found->ai_description ?: $found->description
+        );
 
         if ($isOverrideReport) {
             $photoScore = null;
@@ -72,14 +104,19 @@ class MatchScoreService
                 ($categoryScore * 0.10) +
                 ($temporalSpatialScore * 0.20);
         } else {
+            // Skip the slow photo comparison when even a perfect photo score could not reach the threshold
+            $bestPossible = ($descriptionScore * 0.40) + 40 + ($categoryScore * 0.05)
+                + ($temporalSpatialScore * 0.15) + $bonusPoints;
+            if ($bestPossible < 74.5) {
+                return;
+            }
+
             $photoScore = $this->comparePhotos($report->photo_url, $found->photo_url);
             $baseScore = ($descriptionScore * 0.40) +
                 ($photoScore * 0.40) +
                 ($categoryScore * 0.05) +
                 ($temporalSpatialScore * 0.15);
         }
-
-        $bonusPoints = $this->calculateBonusPoints($report, $found);
 
         $finalScore = min(100, round($baseScore + $bonusPoints));
 
@@ -121,7 +158,7 @@ class MatchScoreService
             'ip_address' => request()->ip() ?? 'system',
         ]);
 
-         if ($finalScore >= 75) {
+        if ($finalScore >= 75) {
             $this->notifyStudent($report, $found, $finalScore, $match->id);
         }
     }
@@ -151,7 +188,7 @@ class MatchScoreService
             return;
         }
 
-                $this->notifyStudent($nextMatch->lostReport, $nextMatch->foundRecord, $nextMatch->confidence_score, $nextMatch->id);
+        $this->notifyStudent($nextMatch->lostReport, $nextMatch->foundRecord, $nextMatch->confidence_score, $nextMatch->id);
     }
 
     protected function compareDescriptions(?string $descriptionA, ?string $descriptionB): int
@@ -161,7 +198,7 @@ class MatchScoreService
         }
 
         try {
-            $response = Http::timeout(20)->retry(3, 2000)->post($this->apiUrl . '?key=' . $this->apiKey, [
+            $response = Http::timeout(20)->retry(3, 500)->post($this->apiUrl . '?key=' . $this->apiKey, [
                 'contents' => [
                     [
                         'parts' => [
@@ -217,7 +254,7 @@ class MatchScoreService
         return (int) round($locationPercent);
     }
 
-          protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
+    protected function notifyStudent(LostItemReport $report, FoundItemRecord $found, int $score, int $matchId)
     {
         $hasActive = Notification::where('user_id', $report->user_id)
             ->where('type', 'match')
@@ -289,7 +326,7 @@ class MatchScoreService
             $claimantImage = base64_encode(file_get_contents($claimantPhotoUrl));
             $foundImage = base64_encode(file_get_contents($foundItemPhotoUrl));
 
-            $response = Http::timeout(20)->retry(3, 2000)->post($this->apiUrl . '?key=' . $this->apiKey, [
+            $response = Http::timeout(20)->retry(3, 500)->post($this->apiUrl . '?key=' . $this->apiKey, [
                 'contents' => [
                     [
                         'parts' => [
@@ -330,6 +367,15 @@ class MatchScoreService
         }
     }
 
+    // Ask Cloudinary for an 800px JPEG so the AI gets a small image, not the full photo
+    private function smallPhoto(string $url): string
+    {
+        if (str_contains($url, '/upload/') && !str_contains($url, '/upload/w_')) {
+            $url = str_replace('/upload/', '/upload/w_800,q_auto,f_jpg/', $url);
+        }
+        return base64_encode(file_get_contents($url));
+    }
+
     protected function comparePhotos(?string $photoUrlA, ?string $photoUrlB): int
     {
         if (empty($photoUrlA) || empty($photoUrlB)) {
@@ -337,10 +383,10 @@ class MatchScoreService
         }
 
         try {
-            $imageA = base64_encode(file_get_contents($photoUrlA));
-            $imageB = base64_encode(file_get_contents($photoUrlB));
+            $imageA = $this->smallPhoto($photoUrlA);
+            $imageB = $this->smallPhoto($photoUrlB);
 
-            $response = Http::timeout(20)->retry(3, 2000)->post($this->apiUrl . '?key=' . $this->apiKey, [
+            $response = Http::timeout(20)->retry(3, 500)->post($this->apiUrl . '?key=' . $this->apiKey, [
                 'contents' => [
                     [
                         'parts' => [
