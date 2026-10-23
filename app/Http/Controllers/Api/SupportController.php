@@ -8,6 +8,7 @@ use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 use App\Models\AuditLog;
 
 class SupportController extends Controller
@@ -175,6 +176,116 @@ class SupportController extends Controller
         }
 
         return response()->json(['message' => 'Reply sent successfully', 'data' => $reply], 201);
+    }
+
+// Admin: find active students by name, email, or school ID
+    public function searchStudents(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['students' => []]);
+        }
+
+        $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+
+        $query = \App\Models\User::where('role', 'student')
+            ->where(function ($w) use ($like) {
+                $w->where('name', 'ILIKE', $like)
+                    ->orWhere('email', 'ILIKE', $like)
+                    ->orWhere('school_id', 'ILIKE', $like);
+            });
+
+        // Active accounts only. Change this if your archive column has a different name
+        if (Schema::hasColumn('users', 'is_active')) {
+            $query->where('is_active', true);
+        } elseif (Schema::hasColumn('users', 'archived_at')) {
+            $query->whereNull('archived_at');
+        }
+
+        $students = $query->orderBy('name')
+            ->limit(8)
+            ->get(['id', 'name', 'email', 'school_id', 'profile_photo_url']);
+
+        return response()->json(['students' => $students]);
+    }
+
+    // Admin: send a message to a student. Reuses their latest thread, or starts a new one
+    public function composeMessage(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|integer',
+            'message' => 'required|string|max:2000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $student = \App\Models\User::where('id', $request->student_id)->where('role', 'student')->first();
+        if (!$student) {
+            return response()->json(['message' => 'Student not found.'], 422);
+        }
+
+        $thread = SupportMessage::where('user_id', $student->id)->orderByDesc('created_at')->first();
+        $created = false;
+
+        if (!$thread) {
+            $thread = SupportMessage::create([
+                'user_id' => $student->id,
+                'name' => $student->name,
+                'email' => $student->email,
+                'message' => 'The Guidance Office started this conversation.',
+                'status' => 'responded',
+                'is_override_request' => false,
+                'override_status' => null,
+            ]);
+            $created = true;
+        } else {
+            $thread->update(['status' => 'responded']);
+        }
+
+        $reply = SupportReply::create([
+            'support_message_id' => $thread->id,
+            'user_id' => $request->user()->id,
+            'sender_type' => 'admin',
+            'message' => $request->message,
+        ]);
+
+        Notification::create([
+            'user_id' => $student->id,
+            'match_id' => null,
+            'title' => 'New Message from the Guidance Office',
+            'message' => 'The Guidance Office sent you a message. Open Support to read it.',
+            'type' => 'support',
+            'is_read' => false,
+            'sent_at' => Carbon::now(),
+        ]);
+
+        if ($student->fcm_token) {
+            (new \App\Services\FcmService())->sendToUser(
+                $student->fcm_token,
+                'New Message from the Guidance Office',
+                'Open FindNest to read it.',
+                ['type' => 'support']
+            );
+        }
+
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'Support Message Sent',
+            'target_type' => 'support_messages',
+            'target_id' => $thread->id,
+            'details' => 'Admin sent a direct message to ' . $student->name,
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Message sent',
+            'thread' => $thread,
+            'reply' => $reply,
+            'created' => $created,
+        ], 201);
     }
 
     public function askChatbot(Request $request)

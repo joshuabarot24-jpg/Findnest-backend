@@ -150,6 +150,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{id}/thread', [SupportController::class, 'getThread']);
             Route::post('/{id}/reply', [SupportController::class, 'reply']);
             Route::post('/{id}/resolve-override', [SupportController::class, 'resolveOverrideRequest']);
+            Route::get('/students/search', [SupportController::class, 'searchStudents']);
+            Route::post('/compose', [SupportController::class, 'composeMessage']);
         });
     });
 
