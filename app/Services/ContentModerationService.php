@@ -18,7 +18,11 @@ class ContentModerationService
         $this->apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
     }
 
-    public function checkImage(string $imageUrl): array
+    /**
+     * @param bool        $allowProhibited true only for an admin uploading a confiscated item
+     * @param string|null $adminIntake     the intake type picked by an admin (null for students)
+     */
+    public function checkImage(string $imageUrl, bool $allowProhibited = false, ?string $adminIntake = null): array
     {
         try {
             $imageContent = @file_get_contents($imageUrl);
@@ -37,7 +41,7 @@ class ContentModerationService
                     [
                         'parts' => [
                             [
-                             'text' => 'Analyze this image for two things. First, content appropriateness for a school lost-and-found system. FLAG the image (appropriate: false) only for these specific things: (1) nudity or sexually suggestive content, (2) obscene or offensive hand gestures (such as a raised middle finger) visible anywhere in the frame, even if an item is also present, (3) weapons being brandished or displayed as a threat (a gun, knife, or blade held or aimed), (4) graphic violence, gore, or injury, (5) a body part shown alone with no identifiable item at all (e.g. just a foot, just a torso, with nothing to report). Do NOT flag an image just because an object has an ambiguous or unusual shape that could resemble something else — for example, a perfume bottle, lighter, vape device, cosmetic container, or novelty item that superficially resembles a weapon or paraphernalia should NOT be flagged based on shape alone. If you are not certain an object is genuinely dangerous or inappropriate, do not flag it — let the item identification step describe it as best it can, even if that description turns out to be imprecise; a wrong guess at what an object is causes far less harm than incorrectly blocking a legitimate upload. Vapes and e-cigarettes are allowed to be photographed and are not automatic violations, since school lost-and-found and confiscated-item systems legitimately handle these. Second, technical image quality: is the main subject reasonably identifiable — can you tell what the item is and make out its general color, shape, and any obvious markings? Only fail this check for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is just a blur of pixels. A normal phone photo taken quickly, in average indoor lighting, or from a slight angle should PASS — minor softness, ordinary shadows, or a slightly off-center shot are all acceptable and common for real-world lost-and-found photos. Only reject images that would genuinely be useless for identifying the item at all. Respond with ONLY a JSON object in this exact format, no other text: {"appropriate": true or false, "appropriate_reason": "brief explanation if inappropriate, or empty string", "quality_ok": true or false, "quality_reason": "brief explanation of the specific quality issue if quality_ok is false, or empty string"}'
+                                'text' => 'Analyze this image for three things. First, content appropriateness for a school lost-and-found system. FLAG the image (appropriate: false) only for these specific things: (1) nudity or sexually suggestive content, (2) obscene or offensive hand gestures (such as a raised middle finger) visible anywhere in the frame, even if an item is also present, (3) weapons being brandished or displayed as a threat (a gun, knife, or blade held or aimed), (4) graphic violence, gore, or injury, (5) a body part shown alone with no identifiable item at all (e.g. just a foot, just a torso, with nothing to report), (6) illegal drugs. Do NOT flag an image as inappropriate just because an object has an ambiguous or unusual shape that could resemble something else - for example, a perfume bottle, cosmetic container, or novelty item that superficially resembles a weapon or paraphernalia should NOT be flagged based on shape alone. Second, prohibited items: set "prohibited" to true ONLY if the main item in the photo is clearly a vape or e-cigarette, a cigarette or other tobacco product, a lighter, a weapon or blade lying on a surface, or other clear school contraband, and set "prohibited_item" to its short name (for example "vape"). If you are not certain, set "prohibited" to false. A prohibited item is not a content violation, it is reported separately from "appropriate". Third, technical image quality: is the main subject reasonably identifiable - can you tell what the item is and make out its general color, shape, and any obvious markings? Only fail this check for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is just a blur of pixels. A normal phone photo taken quickly, in average indoor lighting, or from a slight angle should PASS - minor softness, ordinary shadows, or a slightly off-center shot are all acceptable and common for real-world lost-and-found photos. Only reject images that would genuinely be useless for identifying the item at all. Respond with ONLY a JSON object in this exact format, no other text: {"appropriate": true or false, "appropriate_reason": "brief explanation if inappropriate, or empty string", "prohibited": true or false, "prohibited_item": "short name, or empty string", "quality_ok": true or false, "quality_reason": "brief explanation of the specific quality issue if quality_ok is false, or empty string"}'
                             ],
                             [
                                 'inline_data' => [
@@ -74,10 +78,24 @@ class ContentModerationService
                 ];
             }
 
+            // Always rejected, even for confiscated items (nudity, violence, drugs, and so on)
             if ($result['appropriate'] !== true) {
                 return [
                     'passed' => false,
                     'message' => 'This image was flagged as inappropriate' . (!empty($result['appropriate_reason']) ? ': ' . $result['appropriate_reason'] : '') . '. Please upload a different photo.',
+                ];
+            }
+
+            // Prohibited items (vapes, tobacco, lighters, weapons) are allowed only as confiscated records
+            if (($result['prohibited'] ?? false) === true && !$allowProhibited) {
+                $isAdminWrongType = $adminIntake !== null && $adminIntake !== 'confiscated';
+
+                return [
+                    'passed' => false,
+                    'prohibited' => true,
+                    'message' => $isAdminWrongType
+                        ? "Inappropriate items like vapes can only be submitted under the 'Confiscated' intake type."
+                        : "Items like vapes, lighters, tobacco products and weapons can't be reported here. Please hand the item to the Guidance Office instead.",
                 ];
             }
 

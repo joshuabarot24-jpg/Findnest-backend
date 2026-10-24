@@ -17,6 +17,7 @@ class UploadController extends Controller
             'folder' => 'nullable|string',
             'analyze' => 'nullable|in:0,1,true,false',
             'item_hint' => 'nullable|string',
+            'intake_type' => 'nullable|in:confiscated,found_item,lost_item,others',
         ]);
 
         if ($validator->fails()) {
@@ -35,14 +36,22 @@ class UploadController extends Controller
         );
 
         if ($request->folder !== 'appeal-evidence') {
+            // The server decides the exemption: only an admin choosing "confiscated" may upload prohibited items
+            $user = $request->user();
+            $isAdmin = $user && in_array($user->role, ['admin', 'super_admin'], true);
+            $intakeType = $request->input('intake_type');
+            $allowProhibited = $isAdmin && $intakeType === 'confiscated';
+            $adminIntake = $isAdmin ? $intakeType : null;
+
             $moderationService = new ContentModerationService();
-            $moderationResult = $moderationService->checkImage($uploadedFile['secure_url']);
+            $moderationResult = $moderationService->checkImage($uploadedFile['secure_url'], $allowProhibited, $adminIntake);
 
             if (!$moderationResult['passed']) {
                 Cloudinary::uploadApi()->destroy($uploadedFile['public_id']);
 
                 return response()->json([
                     'message' => $moderationResult['message'],
+                    'prohibited' => $moderationResult['prohibited'] ?? false,
                 ], 422);
             }
         }
