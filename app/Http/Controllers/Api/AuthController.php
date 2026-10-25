@@ -96,7 +96,11 @@ class AuthController extends Controller
             }
 
             if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-                return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+            return response()->json([
+                'message' => 'Too many failed login attempts. Please try again later.',
+                'retry_after' => $wait,
+            ], 429);
             }
 
             if (!Hash::check($request->password, $user->password)) {
@@ -153,7 +157,11 @@ class AuthController extends Controller
         }
 
         if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+            return response()->json([
+                'message' => 'Too many failed login attempts. Please try again later.',
+                'retry_after' => $wait,
+            ], 429);
         }
 
         if (!Hash::check($request->password, $user->password)) {
@@ -229,7 +237,11 @@ class AuthController extends Controller
         }
 
         if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+            return response()->json([
+                'message' => 'Too many failed login attempts. Please try again later.',
+                'retry_after' => $wait,
+            ], 429);
         }
 
         if (!Hash::check($request->password, $user->password)) {
@@ -300,7 +312,11 @@ class AuthController extends Controller
         }
 
         if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-            return response()->json(['message' => 'Too many failed login attempts. Please try again in a few minutes.'], 429);
+            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+            return response()->json([
+                'message' => 'Too many failed login attempts. Please try again later.',
+                'retry_after' => $wait,
+            ], 429);
         }
 
         if (!Hash::check($request->password, $user->password)) {
