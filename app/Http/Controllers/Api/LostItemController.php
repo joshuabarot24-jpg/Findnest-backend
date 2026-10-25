@@ -109,12 +109,23 @@ class LostItemController extends Controller
     public function show($id)
     {
         $report = LostItemReport::with(['user', 'aiMatches'])->findOrFail($id);
+
+        // A student may open only their own report. Admins can open any
+        if (request()->user()->role === 'student' && $report->user_id !== request()->user()->id) {
+            return response()->json(['message' => 'You can only view your own report.'], 403);
+        }
+
         return response()->json(['report' => $report]);
     }
 
     public function update(Request $request, $id)
     {
         $report = LostItemReport::findOrFail($id);
+
+        // A student may edit only their own report. Admins can edit any
+        if ($request->user()->role === 'student' && $report->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'You can only edit your own report.'], 403);
+        }
 
         $report->update($request->only([
             'item_name', 'category', 'description',
@@ -141,6 +152,11 @@ class LostItemController extends Controller
     {
         $report = LostItemReport::findOrFail($id);
         $reason = $request->input('reason');
+
+        // A student may delete only their own report. Admins can delete any
+        if ($request->user()->role === 'student' && $report->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'You can only delete your own report.'], 403);
+        }
 
         $activeMatch = \App\Models\AiMatch::where('report_id', $report->id)
             ->whereIn('match_status', ['pending', 'confirmed'])
