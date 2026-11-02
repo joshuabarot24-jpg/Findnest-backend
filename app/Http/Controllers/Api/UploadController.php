@@ -24,6 +24,7 @@ class UploadController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
+                'error_code' => 'FILE_INVALID',
                 'message' => "This file can't be used. Please upload a JPG, PNG or WEBP photo under 10 MB.",
                 'errors' => $validator->errors(),
             ], 422);
@@ -60,6 +61,7 @@ class UploadController extends Controller
 
                     return response()->json([
                         'success' => false,
+                        'error_code' => $moderationResult['error_code'] ?? 'AI_CONTENT_RESTRICTED',
                         'message' => $moderationResult['message'],
                         'prohibited' => $moderationResult['prohibited'] ?? false,
                     ], 422);
@@ -67,6 +69,7 @@ class UploadController extends Controller
             }
 
             $response = [
+                'success' => true,
                 'message' => 'Image uploaded successfully',
                 'url' => $uploadedFile['secure_url'],
                 'public_id' => $publicId,
@@ -78,13 +81,18 @@ class UploadController extends Controller
 
                 if (!$analysis['success']) {
                     Cloudinary::uploadApi()->destroy($publicId);
-                    return response()->json(['success' => false, 'message' => $analysis['message']], 422);
+                    return response()->json([
+                        'success' => false,
+                        'error_code' => 'AI_ANALYSIS_FAILED',
+                        'message' => $analysis['message'],
+                    ], 422);
                 }
 
                 if (!$analysis['item_detected']) {
                     if ($analysis['multiple_items'] ?? false) {
                         return response()->json([
                             'success' => false,
+                            'error_code' => 'MULTIPLE_ITEMS',
                             'message' => $analysis['message'],
                             'multiple_items' => true,
                             'items_found' => $analysis['items_found'],
@@ -93,7 +101,11 @@ class UploadController extends Controller
                         ], 422);
                     }
                     Cloudinary::uploadApi()->destroy($publicId);
-                    return response()->json(['success' => false, 'message' => $analysis['message']], 422);
+                    return response()->json([
+                        'success' => false,
+                        'error_code' => 'NO_ITEM_DETECTED',
+                        'message' => $analysis['message'],
+                    ], 422);
                 }
 
                 $response['ai_item_name'] = $analysis['item_name'];
@@ -116,6 +128,7 @@ class UploadController extends Controller
 
             return response()->json([
                 'success' => false,
+                'error_code' => 'UPLOAD_FAILED',
                 'message' => 'We could not process this photo right now. Please try again, or use a different photo.',
             ], 503);
         }
@@ -153,6 +166,7 @@ class UploadController extends Controller
         if (!$analysis['success'] || !$analysis['item_detected']) {
             return response()->json([
                 'success' => false,
+                'error_code' => 'AI_ANALYSIS_FAILED',
                 'message' => $analysis['message'] ?? 'Could not analyze the selected item.',
             ], 422);
         }

@@ -82,7 +82,8 @@ class ContentModerationService
             if ($result['appropriate'] !== true) {
                 return [
                     'passed' => false,
-                    'message' => 'This image was flagged as inappropriate' . (!empty($result['appropriate_reason']) ? ': ' . $result['appropriate_reason'] : '') . '. Please upload a different photo.',
+                    'error_code' => 'AI_CONTENT_RESTRICTED',
+                    'message' => 'This image was flagged as inappropriate'. (!empty($result['appropriate_reason']) ? ': ' . $result['appropriate_reason'] : '') . '. Please upload a different photo.',
                 ];
             }
 
@@ -93,6 +94,7 @@ class ContentModerationService
                 return [
                     'passed' => false,
                     'prohibited' => true,
+                    'error_code' => 'AI_CONTENT_RESTRICTED',
                     'message' => $isAdminWrongType
                         ? "Inappropriate items like vapes can only be submitted under the 'Confiscated' intake type."
                         : "Items like vapes, lighters, tobacco products and weapons can't be reported here. Please hand the item to the Guidance Office instead.",
@@ -102,18 +104,21 @@ class ContentModerationService
             if ($result['quality_ok'] !== true) {
                 return [
                     'passed' => false,
+                    'error_code' => 'IMAGE_QUALITY_LOW',
                     'message' => 'This photo doesn\'t look clear enough to use' . (!empty($result['quality_reason']) ? ': ' . $result['quality_reason'] : '') . '. Please upload a clearer, well-lit photo.',
                 ];
             }
 
             return [
                 'passed' => true,
+                'error_code' => null,
                 'message' => 'Image passed content and quality checks.',
             ];
         } catch (\Exception $e) {
             Log::error('Content moderation check exception: ' . $e->getMessage());
             return [
                 'passed' => true,
+                'error_code' => null,
                 'message' => 'Image passed check.',
             ];
         }
