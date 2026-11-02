@@ -74,8 +74,8 @@ class FoundItemController extends Controller
                 $today = \Carbon\Carbon::now('Asia/Manila')->startOfDay();
                 $given = \Carbon\Carbon::parse($value, 'Asia/Manila')->startOfDay();
                 $daysDiff = $given->diffInDays($today, false);
-                if ($given->gt($today) || $daysDiff > 2) {
-                    $fail('The date must be today or within the past 2 days.');
+                if ($given->gt($today) || $daysDiff > 21) {
+                    $fail('The date must be today or within the past 3 weeks.');
                 }
             }],
             'approx_time' => 'nullable|string',
