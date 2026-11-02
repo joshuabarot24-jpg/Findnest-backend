@@ -13,6 +13,22 @@ use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    // Finds a student by student ID, or by email when the value contains an @
+    private function findStudentByIdentifier(string $identifier): ?User
+    {
+        $identifier = trim($identifier);
+
+        return User::where('role', 'student')
+            ->where(function ($q) use ($identifier) {
+                if (str_contains($identifier, '@')) {
+                    $q->whereRaw('LOWER(email) = ?', [strtolower($identifier)]);
+                } else {
+                    $q->where('school_id', $identifier);
+                }
+            })
+            ->first();
+    }
+
     public function superAdminLogin(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -87,20 +103,24 @@ class AuthController extends Controller
         }
 
         if ($isEmail) {
-            $user = User::where('email', $identifier)
+            // An email can belong to a super admin, an admin, or a student
+            $staff = User::where('email', $identifier)
                 ->whereIn('role', ['super_admin', 'admin'])
                 ->first();
 
-            if (!$user) {
-                return response()->json(['message' => 'Invalid credentials'], 401);
+            // Not staff: this may be a student logging in with their email
+            if (!$staff) {
+                return $this->studentPasswordStep($request, $this->findStudentByIdentifier($identifier));
             }
 
+            $user = $staff;
+
             if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
-            return response()->json([
-                'message' => 'Too many failed login attempts. Please try again later.',
-                'retry_after' => $wait,
-            ], 429);
+                $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+                return response()->json([
+                    'message' => 'Too many failed login attempts. Please try again later.',
+                    'retry_after' => $wait,
+                ], 429);
             }
 
             if (!Hash::check($request->password, $user->password)) {
@@ -148,10 +168,12 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::where('school_id', $identifier)
-            ->where('role', 'student')
-            ->first();
+        return $this->studentPasswordStep($request, $this->findStudentByIdentifier($identifier));
+    }
 
+    // The password step for a student: checks the account, then sends the email code
+    private function studentPasswordStep(Request $request, ?User $user)
+    {
         if (!$user) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
@@ -182,6 +204,19 @@ class AuthController extends Controller
             return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
         }
 
+        $this->sendOtpEmail($user);
+
+        return response()->json([
+            'message' => 'OTP sent to your registered email',
+            'requires_otp' => true,
+            'school_id' => $user->school_id,
+            'email' => substr($user->email, 0, 3) . '****@' . explode('@', $user->email)[1],
+        ]);
+    }
+
+    // Saves a new 6-digit code on the student and emails it
+    private function sendOtpEmail(User $user): void
+    {
         $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $user->update([
             'otp_code' => $otp,
@@ -204,13 +239,6 @@ class AuthController extends Controller
             $message->to($user->email)
                 ->subject('FindNest — Your Verification Code');
         });
-
-        return response()->json([
-            'message' => 'OTP sent to your registered email',
-            'requires_otp' => true,
-            'school_id' => $user->school_id,
-            'email' => substr($user->email, 0, 3) . '****@' . explode('@', $user->email)[1],
-        ]);
     }
 
     public function adminLogin(Request $request)
@@ -303,67 +331,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'The system is currently under maintenance. Please try again later.'], 503);
         }
 
-        $user = User::where('school_id', $request->school_id)
-            ->where('role', 'student')
-            ->first();
-
-        if (!$user) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
-            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
-            return response()->json([
-                'message' => 'Too many failed login attempts. Please try again later.',
-                'retry_after' => $wait,
-            ], 429);
-        }
-
-        if (!Hash::check($request->password, $user->password)) {
-            $user->increment('failed_login_attempts');
-            if ($user->failed_login_attempts >= 5) {
-                $user->update(['login_locked_until' => now()->addMinutes(15)]);
-            }
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $user->update(['failed_login_attempts' => 0, 'login_locked_until' => null]);
-
-        if (!$user->is_active) {
-            return response()->json(['message' => 'Account is deactivated'], 403);
-        }
-
-        if ($user->is_restricted) {
-            return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
-        }
-
-        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $user->update([
-            'otp_code' => $otp,
-            'otp_expires_at' => Carbon::now()->addMinutes(10),
-        ]);
-
-        $emailHtml = '
-        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 30px 20px; text-align: center;">
-            <p style="font-size: 20px; font-weight: 900; color: #0B4F2C; margin-bottom: 4px;">
-                FIND<span style="color: #0B4F2C;">NEST</span>
-            </p>
-            <p style="color: #9ca3af; font-size: 12px; margin-bottom: 30px;">SJDM Cornerstone College Inc.</p>
-            <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">Your verification code is:</p>
-            <p style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0B4F2C; margin: 0 0 20px 0;">' . $otp . '</p>
-            <p style="color: #9ca3af; font-size: 12px;">This code expires in 10 minutes.</p>
-            <p style="color: #9ca3af; font-size: 11px; margin-top: 30px;">Do not share this code with anyone.</p>
-        </div>';
-
-        Mail::html($emailHtml, function ($message) use ($user) {
-            $message->to($user->email)
-                ->subject('FindNest — Your Verification Code');
-        });
-
-        return response()->json([
-            'message' => 'OTP sent to your registered email',
-            'email' => substr($user->email, 0, 3) . '****@' . explode('@', $user->email)[1],
-        ]);
+        return $this->studentPasswordStep($request, $this->findStudentByIdentifier($request->school_id));
     }
 
     public function verifyOtp(Request $request)
@@ -377,9 +345,7 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = User::where('school_id', $request->school_id)
-            ->where('role', 'student')
-            ->first();
+        $user = $this->findStudentByIdentifier($request->school_id);
 
         if (!$user) {
             return response()->json(['message' => 'Student not found'], 404);
@@ -438,9 +404,7 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = User::where('school_id', $request->school_id)
-            ->where('role', 'student')
-            ->first();
+        $user = $this->findStudentByIdentifier($request->school_id);
 
         if (!$user) {
             return response()->json(['message' => 'Student not found'], 404);
@@ -458,28 +422,7 @@ class AuthController extends Controller
             }
         }
 
-        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $user->update([
-            'otp_code' => $otp,
-            'otp_expires_at' => Carbon::now()->addMinutes(10),
-        ]);
-
-        $emailHtml = '
-        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 30px 20px; text-align: center;">
-            <p style="font-size: 20px; font-weight: 900; color: #0B4F2C; margin-bottom: 4px;">
-                FIND<span style="color: #0B4F2C;">NEST</span>
-            </p>
-            <p style="color: #9ca3af; font-size: 12px; margin-bottom: 30px;">SJDM Cornerstone College Inc.</p>
-            <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">Your verification code is:</p>
-            <p style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0B4F2C; margin: 0 0 20px 0;">' . $otp . '</p>
-            <p style="color: #9ca3af; font-size: 12px;">This code expires in 10 minutes.</p>
-            <p style="color: #9ca3af; font-size: 11px; margin-top: 30px;">Do not share this code with anyone.</p>
-        </div>';
-
-        Mail::html($emailHtml, function ($message) use ($user) {
-            $message->to($user->email)
-                ->subject('FindNest — Your Verification Code');
-        });
+        $this->sendOtpEmail($user);
 
         return response()->json([
             'message' => 'New OTP sent to your registered email',
@@ -547,7 +490,7 @@ class AuthController extends Controller
         return response()->json(['user' => $request->user()]);
     }
 
-        public function forgotPassword(Request $request)
+    public function forgotPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
@@ -583,5 +526,4 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'If that email exists in our system, a reset link has been sent.']);
     }
-
 }
