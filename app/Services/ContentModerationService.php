@@ -30,19 +30,37 @@ class ContentModerationService
                 Log::warning('Could not read image content for moderation, allowing upload.');
                 return [
                     'passed' => true,
+                    'error_code' => null,
                     'message' => 'Image passed content and quality checks.',
                 ];
             }
 
             $base64Image = base64_encode($imageContent);
 
-            $response = Http::timeout(20)->retry(2, 1000)->post($this->apiUrl . '?key=' . $this->apiKey, [
+            $prompt = 'You are the photo checker for a school lost-and-found system. Look carefully at the WHOLE image, including hands, fingers, the background and the edges, before you answer. Fill in EVERY field below as a separate observation. Do not skip a field because the main item looks harmless. '
+                . 'Fields: '
+                . '"person_visible": true if any real person, face, arm or hand is visible anywhere in the image. '
+                . '"hand_gesture": look at every visible hand. "obscene" if ANY hand shows a raised middle finger or another offensive gesture, even if it is small, partly visible, or the hand is holding an item. "neutral" if hands are visible with no offensive gesture. "none" if no hand is visible. '
+                . '"nudity_or_suggestive": true for nudity or sexually suggestive content. '
+                . '"weapon_brandished": true only if a gun, knife or blade is held, aimed or displayed as a threat. A weapon lying on a surface is not brandished. '
+                . '"graphic_violence": true for gore, blood or injury. '
+                . '"body_part_only": true if the image shows only a body part (for example just a foot or torso) with no identifiable item to report. '
+                . '"illegal_drugs": true if illegal drugs are visible. '
+                . '"mannequin_or_display_figure": true ONLY if the main subject is a bare shop mannequin, display dummy, bust or large statue with NO clothing, bag or accessory worn on it that could be the item being reported. If a mannequin is wearing clothes, a bag, a hat, shoes or accessories, the clothing or accessory is the item and this must be false. A doll, stuffed toy, action figure or small toy is a normal item and must be false. '
+                . '"appropriate": false if any of the nudity, weapon, violence, body part only, illegal drugs or obscene gesture fields is true, otherwise true. '
+                . '"appropriate_reason": a brief explanation if appropriate is false, or an empty string. '
+                . '"prohibited": true ONLY if the main item is clearly a vape or e-cigarette, a cigarette or other tobacco product, a lighter, a weapon or blade lying on a surface, or other clear school contraband. If you are not certain, false. A perfume bottle, cosmetic container, USB drive or novelty item must not be flagged based on shape alone. '
+                . '"prohibited_item": the short name of that item (for example "vape"), or an empty string. '
+                . '"quality_ok": false only for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is only a blur of pixels. A normal phone photo in average indoor lighting, slightly soft or off-center, must pass. '
+                . '"quality_reason": the specific quality problem if quality_ok is false, or an empty string. '
+                . 'Respond with ONLY a JSON object with exactly these fields: '
+                . '{"person_visible": true or false, "hand_gesture": "none" or "neutral" or "obscene", "nudity_or_suggestive": true or false, "weapon_brandished": true or false, "graphic_violence": true or false, "body_part_only": true or false, "illegal_drugs": true or false, "mannequin_or_display_figure": true or false, "appropriate": true or false, "appropriate_reason": "", "prohibited": true or false, "prohibited_item": "", "quality_ok": true or false, "quality_reason": ""}';
+
+            $response = Http::timeout(25)->retry(2, 1000)->post($this->apiUrl . '?key=' . $this->apiKey, [
                 'contents' => [
                     [
                         'parts' => [
-                            [
-                                'text' => 'Analyze this image for three things. First, content appropriateness for a school lost-and-found system. FLAG the image (appropriate: false) only for these specific things: (1) nudity or sexually suggestive content, (2) obscene or offensive hand gestures (such as a raised middle finger) visible anywhere in the frame, even if an item is also present, (3) weapons being brandished or displayed as a threat (a gun, knife, or blade held or aimed), (4) graphic violence, gore, or injury, (5) a body part shown alone with no identifiable item at all (e.g. just a foot, just a torso, with nothing to report), (6) illegal drugs. Do NOT flag an image as inappropriate just because an object has an ambiguous or unusual shape that could resemble something else - for example, a perfume bottle, cosmetic container, or novelty item that superficially resembles a weapon or paraphernalia should NOT be flagged based on shape alone. Second, prohibited items: set "prohibited" to true ONLY if the main item in the photo is clearly a vape or e-cigarette, a cigarette or other tobacco product, a lighter, a weapon or blade lying on a surface, or other clear school contraband, and set "prohibited_item" to its short name (for example "vape"). If you are not certain, set "prohibited" to false. A prohibited item is not a content violation, it is reported separately from "appropriate". Third, technical image quality: is the main subject reasonably identifiable - can you tell what the item is and make out its general color, shape, and any obvious markings? Only fail this check for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is just a blur of pixels. A normal phone photo taken quickly, in average indoor lighting, or from a slight angle should PASS - minor softness, ordinary shadows, or a slightly off-center shot are all acceptable and common for real-world lost-and-found photos. Only reject images that would genuinely be useless for identifying the item at all. Respond with ONLY a JSON object in this exact format, no other text: {"appropriate": true or false, "appropriate_reason": "brief explanation if inappropriate, or empty string", "prohibited": true or false, "prohibited_item": "short name, or empty string", "quality_ok": true or false, "quality_reason": "brief explanation of the specific quality issue if quality_ok is false, or empty string"}'
-                            ],
+                            ['text' => $prompt],
                             [
                                 'inline_data' => [
                                     'mime_type' => 'image/jpeg',
@@ -51,13 +69,18 @@ class ContentModerationService
                             ]
                         ]
                     ]
-                ]
+                ],
+                'generationConfig' => [
+                    'temperature' => 0,
+                    'responseMimeType' => 'application/json',
+                ],
             ]);
 
             if (!$response->successful()) {
                 Log::warning('Gemini moderation check failed (' . $response->status() . '): ' . $response->body() . ' - Bypassing check.');
                 return [
                     'passed' => true,
+                    'error_code' => null,
                     'message' => 'Image check bypassed due to temporary AI service unavailability.',
                 ];
             }
@@ -70,20 +93,60 @@ class ContentModerationService
 
             $result = json_decode($cleanedText, true);
 
-            if (!is_array($result) || !isset($result['appropriate']) || !isset($result['quality_ok'])) {
+            if (!is_array($result) || !isset($result['quality_ok'])) {
                 Log::error('Gemini content check returned unexpected format: ' . $textResult);
                 return [
                     'passed' => true,
+                    'error_code' => null,
                     'message' => 'Image passed check.',
                 ];
             }
 
-            // Always rejected, even for confiscated items (nudity, violence, drugs, and so on)
-            if ($result['appropriate'] !== true) {
+            // The server decides from the separate answers, not from one overall verdict
+            $found = [];
+            if (($result['hand_gesture'] ?? 'none') === 'obscene') {
+                $found[] = 'an obscene hand gesture';
+            }
+            if (($result['nudity_or_suggestive'] ?? false) === true) {
+                $found[] = 'nudity or sexually suggestive content';
+            }
+            if (($result['weapon_brandished'] ?? false) === true) {
+                $found[] = 'a weapon being brandished';
+            }
+            if (($result['graphic_violence'] ?? false) === true) {
+                $found[] = 'graphic violence';
+            }
+            if (($result['body_part_only'] ?? false) === true) {
+                $found[] = 'a body part with no item to report';
+            }
+            if (($result['illegal_drugs'] ?? false) === true) {
+                $found[] = 'illegal drugs';
+            }
+
+            // Always rejected, even for confiscated items
+            if (!empty($found) || ($result['appropriate'] ?? true) === false) {
+                Log::info('Moderation rejected an image', array_intersect_key($result, array_flip([
+                    'hand_gesture', 'nudity_or_suggestive', 'weapon_brandished', 'graphic_violence',
+                    'body_part_only', 'illegal_drugs', 'appropriate_reason',
+                ])));
+
+                $reason = !empty($found)
+                    ? 'it contains ' . implode(' and ', $found)
+                    : ($result['appropriate_reason'] ?? 'it does not meet the campus content guidelines');
+
                 return [
                     'passed' => false,
                     'error_code' => 'AI_CONTENT_RESTRICTED',
-                    'message' => 'This image was flagged as inappropriate'. (!empty($result['appropriate_reason']) ? ': ' . $result['appropriate_reason'] : '') . '. Please upload a different photo.',
+                    'message' => 'This image was flagged as inappropriate: ' . $reason . '. Please upload a different photo.',
+                ];
+            }
+
+            // A mannequin or display figure is not a lost-and-found item
+            if (($result['mannequin_or_display_figure'] ?? false) === true) {
+                return [
+                    'passed' => false,
+                    'error_code' => 'NOT_AN_ITEM',
+                    'message' => 'This photo shows a bare mannequin or display figure with no item on it. Please upload a photo of the item itself, for example the clothing without the mannequin.',
                 ];
             }
 
