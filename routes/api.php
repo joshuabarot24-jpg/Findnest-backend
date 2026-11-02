@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('found-items')->middleware('admin.privilege:item_management')->group(function () {
         Route::get('/', [FoundItemController::class, 'index']);
         Route::post('/', [FoundItemController::class, 'store']);
+        Route::get('/students/search', [SupportController::class, 'searchStudents']);
         Route::get('/{id}', [FoundItemController::class, 'show']);
         Route::put('/{id}', [FoundItemController::class, 'update']);
         Route::delete('/{id}', [FoundItemController::class, 'destroy']);

@@ -33,8 +33,18 @@ class LostItemController extends Controller
     {
         $isAdmin = in_array($request->user()->role, ['admin', 'super_admin']);
 
-        if (!$isAdmin) {
-            $activeCount = LostItemReport::where('user_id', $request->user()->id)
+        // An admin can log a report on behalf of a student. A student always reports for themselves
+        $owner = $request->user();
+        if ($isAdmin && $request->filled('student_id')) {
+            $owner = \App\Models\User::where('id', $request->student_id)->where('role', 'student')->first();
+            if (!$owner) {
+                return response()->json(['message' => 'The selected student could not be found.'], 422);
+            }
+        }
+
+        // The 5 active reports limit applies to the student who owns the report
+        if ($owner->role === 'student') {
+            $activeCount = LostItemReport::where('user_id', $owner->id)
                 ->where('status', 'searching')
                 ->count();
 
@@ -85,7 +95,7 @@ class LostItemController extends Controller
             'photo_url' => $request->photo_url,
             'photo_urls' => $request->photo_urls ?? ($request->photo_url ? [$request->photo_url] : null),
             'status' => 'searching',
-            'submitted_via_override' => (bool) $request->user()->manual_override_granted,
+            'submitted_via_override' => (bool) $owner->manual_override_granted,
         ]);
 
         AuditLog::create([
@@ -93,7 +103,9 @@ class LostItemController extends Controller
             'action' => 'Lost Item Reported',
             'target_type' => 'lost_item_reports',
             'target_id' => $report->id,
-            'details' => 'Student reported lost item: ' . $report->item_name . ' and ' . $report->location_lost,
+            'details' => $owner->id !== $request->user()->id
+            ? 'Admin logged a lost item for ' . $owner->name . ': ' . $report->item_name . ' at ' . $report->location_lost
+            : 'Student reported lost item: ' . $report->item_name . ' and ' . $report->location_lost,
             'performed_by' => ($isAdmin ? 'Admin' : 'Student') . ': ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
