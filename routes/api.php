@@ -121,6 +121,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/hotspots', [LocationController::class, 'hotspots']);
         Route::post('/', [LocationController::class, 'store']);
         Route::get('/top-locations', [LocationController::class, 'topLocations']);
+        Route::get('/activity', [LocationController::class, 'activity']);
     });
 
     Route::prefix('upload')->group(function () {
