@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AiMatchController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\UploadController;
+use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\FcmController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\SystemStatsController;
@@ -54,6 +55,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [LostItemController::class, 'show']);
         Route::put('/{id}', [LostItemController::class, 'update']);
         Route::delete('/{id}', [LostItemController::class, 'destroy']);
+    });
+
+    Route::prefix('inventory')->middleware('admin.privilege:item_management')->group(function () {
+        Route::get('/', [InventoryController::class, 'index']);
+        Route::post('/', [InventoryController::class, 'store']);
+        Route::put('/{id}', [InventoryController::class, 'update']);
+        Route::delete('/{id}', [InventoryController::class, 'destroy']);
     });
 
     Route::prefix('found-items')->middleware('admin.privilege:item_management')->group(function () {

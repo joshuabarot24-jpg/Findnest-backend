@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ContentModerationService;
 use App\Services\ItemDescriptionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
@@ -21,77 +22,103 @@ class UploadController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'success' => false,
+                'message' => "This file can't be used. Please upload a JPG, PNG or WEBP photo under 10 MB.",
+                'errors' => $validator->errors(),
+            ], 422);
         }
 
-        $uploadedFile = Cloudinary::uploadApi()->upload(
-            $request->file('image')->getRealPath(),
-            [
-                'folder' => 'findnest/' . ($request->folder ?? 'items'),
-                'transformation' => [
-                    'quality' => 'auto',
-                    'fetch_format' => 'auto',
-                ],
-            ]
-        );
+        $publicId = null;
 
-        if ($request->folder !== 'appeal-evidence') {
-            // The server decides the exemption: only an admin choosing "confiscated" may upload prohibited items
-            $user = $request->user();
-            $isAdmin = $user && in_array($user->role, ['admin', 'super_admin'], true);
-            $intakeType = $request->input('intake_type');
-            $allowProhibited = $isAdmin && $intakeType === 'confiscated';
-            $adminIntake = $isAdmin ? $intakeType : null;
+        try {
+            $uploadedFile = Cloudinary::uploadApi()->upload(
+                $request->file('image')->getRealPath(),
+                [
+                    'folder' => 'findnest/' . ($request->folder ?? 'items'),
+                    'transformation' => [
+                        'quality' => 'auto',
+                        'fetch_format' => 'auto',
+                    ],
+                ]
+            );
+            $publicId = $uploadedFile['public_id'];
 
-            $moderationService = new ContentModerationService();
-            $moderationResult = $moderationService->checkImage($uploadedFile['secure_url'], $allowProhibited, $adminIntake);
+            if ($request->folder !== 'appeal-evidence') {
+                // The server decides the exemption: only an admin choosing "confiscated" may upload prohibited items
+                $user = $request->user();
+                $isAdmin = $user && in_array($user->role, ['admin', 'super_admin'], true);
+                $intakeType = $request->input('intake_type');
+                $allowProhibited = $isAdmin && $intakeType === 'confiscated';
+                $adminIntake = $isAdmin ? $intakeType : null;
 
-            if (!$moderationResult['passed']) {
-                Cloudinary::uploadApi()->destroy($uploadedFile['public_id']);
+                $moderationService = new ContentModerationService();
+                $moderationResult = $moderationService->checkImage($uploadedFile['secure_url'], $allowProhibited, $adminIntake);
 
-                return response()->json([
-                    'message' => $moderationResult['message'],
-                    'prohibited' => $moderationResult['prohibited'] ?? false,
-                ], 422);
-            }
-        }
+                if (!$moderationResult['passed']) {
+                    Cloudinary::uploadApi()->destroy($publicId);
 
-        $response = [
-            'message' => 'Image uploaded successfully',
-            'url' => $uploadedFile['secure_url'],
-            'public_id' => $uploadedFile['public_id'],
-        ];
-
-        if ($request->boolean('analyze', true)) {
-            $descriptionService = new ItemDescriptionService();
-            $analysis = $descriptionService->analyzeImage($uploadedFile['secure_url'], $request->item_hint);
-
-            if (!$analysis['success']) {
-                Cloudinary::uploadApi()->destroy($uploadedFile['public_id']);
-                return response()->json(['message' => $analysis['message']], 422);
-            }
-
-            if (!$analysis['item_detected']) {
-                if ($analysis['multiple_items'] ?? false) {
                     return response()->json([
-                        'message' => $analysis['message'],
-                        'multiple_items' => true,
-                        'items_found' => $analysis['items_found'],
-                        'url' => $uploadedFile['secure_url'],
-                        'public_id' => $uploadedFile['public_id'],
+                        'success' => false,
+                        'message' => $moderationResult['message'],
+                        'prohibited' => $moderationResult['prohibited'] ?? false,
                     ], 422);
                 }
-                Cloudinary::uploadApi()->destroy($uploadedFile['public_id']);
-                return response()->json(['message' => $analysis['message']], 422);
             }
 
-            $response['ai_item_name'] = $analysis['item_name'];
-            $response['ai_category'] = $analysis['category'];
-            $response['ai_description'] = $analysis['ai_description'];
-            $response['ai_details'] = $analysis['details'];
-        }
+            $response = [
+                'message' => 'Image uploaded successfully',
+                'url' => $uploadedFile['secure_url'],
+                'public_id' => $publicId,
+            ];
 
-        return response()->json($response);
+            if ($request->boolean('analyze', true)) {
+                $descriptionService = new ItemDescriptionService();
+                $analysis = $descriptionService->analyzeImage($uploadedFile['secure_url'], $request->item_hint);
+
+                if (!$analysis['success']) {
+                    Cloudinary::uploadApi()->destroy($publicId);
+                    return response()->json(['success' => false, 'message' => $analysis['message']], 422);
+                }
+
+                if (!$analysis['item_detected']) {
+                    if ($analysis['multiple_items'] ?? false) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => $analysis['message'],
+                            'multiple_items' => true,
+                            'items_found' => $analysis['items_found'],
+                            'url' => $uploadedFile['secure_url'],
+                            'public_id' => $publicId,
+                        ], 422);
+                    }
+                    Cloudinary::uploadApi()->destroy($publicId);
+                    return response()->json(['success' => false, 'message' => $analysis['message']], 422);
+                }
+
+                $response['ai_item_name'] = $analysis['item_name'];
+                $response['ai_category'] = $analysis['category'];
+                $response['ai_description'] = $analysis['ai_description'];
+                $response['ai_details'] = $analysis['details'];
+            }
+
+            return response()->json($response);
+        } catch (\Throwable $e) {
+            Log::error('Image upload failed: ' . $e->getMessage());
+
+            if ($publicId) {
+                try {
+                    Cloudinary::uploadApi()->destroy($publicId);
+                } catch (\Throwable $ignored) {
+                    // nothing more to do
+                }
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not process this photo right now. Please try again, or use a different photo.',
+            ], 503);
+        }
     }
 
     public function deleteImage(Request $request)
@@ -124,7 +151,10 @@ class UploadController extends Controller
         $analysis = $descriptionService->analyzeImage($request->url, $request->item_hint);
 
         if (!$analysis['success'] || !$analysis['item_detected']) {
-            return response()->json(['message' => $analysis['message'] ?? 'Could not analyze the selected item.'], 422);
+            return response()->json([
+                'success' => false,
+                'message' => $analysis['message'] ?? 'Could not analyze the selected item.',
+            ], 422);
         }
 
         return response()->json([
@@ -134,6 +164,4 @@ class UploadController extends Controller
             'ai_details' => $analysis['details'],
         ]);
     }
-
-
 }

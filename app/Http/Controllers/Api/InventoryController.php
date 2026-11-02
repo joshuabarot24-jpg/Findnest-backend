@@ -1,0 +1,83 @@
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\InventoryItem;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+class InventoryController extends Controller
+{
+    private function rules(): array
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'category' => 'required|string|max:100',
+            'quantity' => 'required|integer|min:0|max:100000',
+            'location' => 'nullable|string|max:255',
+            'status' => 'required|in:in_stock,in_use,disposed',
+        ];
+    }
+
+    public function index()
+    {
+        $items = InventoryItem::with('user:id,name')->orderByDesc('created_at')->get();
+        return response()->json(['items' => $items]);
+    }
+
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), $this->rules());
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $item = InventoryItem::create($validator->validated() + ['logged_by' => $request->user()->id]);
+
+        $this->log($request, 'Inventory Item Added', $item, 'Added inventory item: ' . $item->name . ' (qty ' . $item->quantity . ')');
+
+        return response()->json(['message' => 'Inventory item added', 'item' => $item->load('user:id,name')], 201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $item = InventoryItem::findOrFail($id);
+
+        $validator = Validator::make($request->all(), $this->rules());
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $item->update($validator->validated());
+
+        $this->log($request, 'Inventory Item Updated', $item, 'Updated inventory item: ' . $item->name . ' (status ' . $item->status . ', qty ' . $item->quantity . ')');
+
+        return response()->json(['message' => 'Inventory item updated', 'item' => $item->load('user:id,name')]);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $item = InventoryItem::findOrFail($id);
+        $name = $item->name;
+        $item->delete();
+
+        $this->log($request, 'Inventory Item Deleted', $item, 'Deleted inventory item: ' . $name);
+
+        return response()->json(['message' => 'Inventory item deleted']);
+    }
+
+    private function log(Request $request, string $action, InventoryItem $item, string $details): void
+    {
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => $action,
+            'target_type' => 'inventory_items',
+            'target_id' => $item->id,
+            'details' => $details,
+            'performed_by' => 'Admin: ' . $request->user()->name,
+            'ip_address' => $request->ip(),
+        ]);
+    }
+}

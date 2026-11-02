@@ -66,6 +66,9 @@ class FoundItemController extends Controller
             'category' => 'required|string',
             'description' => 'nullable|string',
             'ai_description' => 'nullable|string',
+            'student_name' => 'nullable|string|max:255',
+            'violation_notes' => 'nullable|string|max:2000',
+            'status' => 'nullable|string',
             'location_found' => $request->status === 'others' ? 'nullable|string' : 'required|string',
             'date_found' => ['required', 'date', function ($attribute, $value, $fail) {
                 $today = \Carbon\Carbon::now('Asia/Manila')->startOfDay();
@@ -90,6 +93,9 @@ class FoundItemController extends Controller
 
         $isStudent = $request->user()->role === 'student';
 
+        // Only an admin can record a confiscated item. A student's report is always a normal found report
+        $isConfiscated = !$isStudent && $request->input('status') === 'confiscated';
+
         $record = FoundItemRecord::create([
             'admin_id' => $request->user()->id,
             'item_name' => $request->item_name,
@@ -107,20 +113,22 @@ class FoundItemController extends Controller
             'photo_url' => $request->photo_url,
             'photo_urls' => $request->photo_urls ?? ($request->photo_url ? [$request->photo_url] : null),
             'storage_location' => $request->storage_location,
-            'status' => 'unclaimed',
+            'student_name' => $isConfiscated ? $request->student_name : null,
+            'violation_notes' => $isConfiscated ? $request->violation_notes : null,
+            'status' => $isConfiscated ? 'confiscated' : 'unclaimed',
         ]);
 
         AuditLog::create([
             'user_id' => $request->user()->id,
-            'action' => 'Found Item Recorded',
+            'action' => $isConfiscated ? 'Confiscated Item Recorded' : 'Found Item Recorded',
             'target_type' => 'found_item_records',
             'target_id' => $record->id,
-           'details' => 'Admin recorded found item: ' . $record->item_name . ($record->location_found ? ' at ' . $record->location_found : ' (school inventory item)'),
+            'details' => ($isConfiscated ? 'Admin recorded confiscated item: ' : 'Admin recorded found item: ') . $record->item_name . ($record->location_found ? ' at ' . $record->location_found : ''),
             'performed_by' => 'Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        if ($record->receipt_confirmed) {
+        if ($record->receipt_confirmed && !$isConfiscated) {
             \App\Jobs\RunFoundRecordMatching::dispatch($record->id);
         }
 

@@ -29,6 +29,8 @@ class FoundItemRecord extends Model
         'surrender_deadline',
         'receipt_confirmed',
         'receipt_confirmed_at',
+        'student_name',
+        'violation_notes',
     ];
 
     protected $casts = [
