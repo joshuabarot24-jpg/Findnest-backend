@@ -137,7 +137,9 @@ class ContentModerationService
                 return [
                     'passed' => false,
                     'error_code' => 'AI_CONTENT_RESTRICTED',
-                    'message' => 'This image was flagged as inappropriate: ' . $reason . '. Please upload a different photo.',
+                    'message' => !empty($found)
+                        ? 'This photo contains ' . implode(' and ', $found) . ' and is not allowed to be uploaded. Please upload a different photo.'
+                        : 'This image was flagged as inappropriate: ' . $reason . '. Please upload a different photo.',
                 ];
             }
 
