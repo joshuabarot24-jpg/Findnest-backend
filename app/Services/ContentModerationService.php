@@ -46,10 +46,10 @@ class ContentModerationService
                 . '"graphic_violence": true for gore, blood or injury. '
                 . '"body_part_only": true if the image shows only a body part (for example just a foot or torso) with no identifiable item to report. '
                 . '"illegal_drugs": true if illegal drugs are visible. '
-                . '"mannequin_or_display_figure": true ONLY if the main subject is a bare shop mannequin, display dummy, bust or large statue with NO clothing, bag or accessory worn on it that could be the item being reported. If a mannequin is wearing clothes, a bag, a hat, shoes or accessories, the clothing or accessory is the item and this must be false. A doll, stuffed toy, action figure or small toy is a normal item and must be false. '
+                . '"mannequin_or_display_figure": true ONLY if the main subject is a bare shop mannequin, display dummy, bust or large statue with NO clothing, bag or accessory worn on it that could be the item being reported. If a mannequin is wearing clothes, a bag, a hat, shoes or accessories, the clothing or accessory is the item and this must be false. A doll, stuffed toy, action figure or small toy is a normal item and must be false for this field. '
                 . '"appropriate": false if any of the nudity, weapon, violence, body part only, illegal drugs or obscene gesture fields is true, otherwise true. '
                 . '"appropriate_reason": a brief explanation if appropriate is false, or an empty string. '
-                . '"prohibited": true ONLY if the main item is clearly a vape or e-cigarette, a cigarette or other tobacco product, a lighter, a weapon or blade lying on a surface, or other clear school contraband. If you are not certain, false. A perfume bottle, cosmetic container, USB drive or novelty item must not be flagged based on shape alone. '
+                . '"prohibited": true ONLY if the main item is clearly a vape or e-cigarette, a cigarette or other tobacco product, a lighter, a weapon or blade lying on a surface, a toy gun, water gun, water pistol, airsoft or Nerf-style blaster, replica firearm or any toy weapon (anything clearly gun-shaped or weapon-shaped, even if plastic or brightly colored), or other clear school contraband. If you are not certain, false. A perfume bottle, spray bottle, water bottle, cosmetic container, USB drive or novelty item must not be flagged based on shape alone. '
                 . '"prohibited_item": the short name of that item (for example "vape"), or an empty string. '
                 . '"quality_ok": false only for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is only a blur of pixels. A normal phone photo in average indoor lighting, slightly soft or off-center, must pass. '
                 . '"quality_reason": the specific quality problem if quality_ok is false, or an empty string. '
@@ -162,7 +162,7 @@ class ContentModerationService
                     'error_code' => 'AI_CONTENT_RESTRICTED',
                     'message' => $isAdminWrongType
                         ? "Inappropriate items like vapes can only be submitted under the 'Confiscated' intake type."
-                        : "Items like vapes, lighters, tobacco products and weapons can't be reported here. Please hand the item to the Guidance Office instead.",
+                        : "Items like vapes, lighters, tobacco products, weapons and toy weapons (such as toy guns and water pistols) can't be reported here. Please hand the item to the Guidance Office instead.",
                 ];
             }
 
