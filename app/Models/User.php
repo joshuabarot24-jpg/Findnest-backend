@@ -86,4 +86,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(AuditLog::class, 'user_id');
     }
+
+     // True only while the override is on AND its 24 hours have not passed
+    public function hasActiveOverride(): bool
+    {
+        return (bool) $this->manual_override_granted
+            && $this->override_expires_at
+            && now()->lt(\Carbon\Carbon::parse($this->override_expires_at));
+    }
 }

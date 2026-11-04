@@ -67,7 +67,10 @@ class SupportController extends Controller
         $student = \App\Models\User::find($message->user_id);
         if ($student) {
             if ($request->decision === 'approve') {
-                $student->update(['manual_override_granted' => true]);
+                $student->forceFill([
+                    'manual_override_granted' => true,
+                    'override_expires_at' => now()->addHours(24),
+                ])->save();
             }
 
             Notification::create([
