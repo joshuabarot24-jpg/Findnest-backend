@@ -65,6 +65,7 @@ class User extends Authenticatable
         'id_verified' => 'boolean',
         'flagged_for_review' => 'boolean',
         'restored_at' => 'datetime',
+        'override_expires_at' => 'datetime',
     ];
 
     public function lostReports()
