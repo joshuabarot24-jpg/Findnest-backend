@@ -151,7 +151,21 @@ class ClaimController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        // The photo score can wait in the queue
         \App\Jobs\RunClaimPostProcessing::dispatch($claim->id);
+
+        // The secret questions are made now, so the student sees them right after claiming
+        try {
+            $questionResult = (new \App\Services\OwnershipQuestionService())->generateQuestions($claim);
+            if (($questionResult['status'] ?? '') === 'skipped') {
+                $claim->update([
+                    'verification_skipped' => true,
+                    'verification_skip_reason' => $questionResult['reason'] ?? null,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('Ownership questions failed during claim: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Claim submitted successfully',

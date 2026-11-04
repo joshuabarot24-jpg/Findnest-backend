@@ -54,6 +54,11 @@ class RunClaimPostProcessing implements ShouldQueue
             }
         }
 
+        // The questions are already made when the claim is created
+        if ($claim->ownershipQuestions()->exists() || $claim->verification_skipped) {
+            return;
+        }
+
         $questionService = new OwnershipQuestionService();
         $questionResult = $questionService->generateQuestions($claim);
 
