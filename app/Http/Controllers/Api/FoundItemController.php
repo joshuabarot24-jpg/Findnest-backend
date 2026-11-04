@@ -100,7 +100,7 @@ class FoundItemController extends Controller
             return response()->json([
                 'success' => false,
                 'error_code' => 'DUPLICATE_REPORT_DETECTED',
-                'message' => 'Duplicate report detected. You have already logged a matching report recently.',
+                'message' => 'Duplicate report detected. You already submitted a matching report in the last 15 minutes. Please wait, or go back and change the details if this is a different item.',
             ], 422);
         }
 
