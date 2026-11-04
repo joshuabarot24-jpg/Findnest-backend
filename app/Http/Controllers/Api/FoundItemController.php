@@ -149,7 +149,7 @@ class FoundItemController extends Controller
             'message' => $record->receipt_confirmed
                 ? 'Found item recorded successfully'
                 : 'Found item report submitted. Please surrender it to Ms. Shelly S. Durban within 2 school days — matching will begin once receipt is confirmed.',
-            'record' => $record
+            'record' => $record->load('admin')
         ], 201);
     }
 
