@@ -12,7 +12,11 @@ class ProfileController extends Controller
 {
     public function show(Request $request)
     {
-        return response()->json(['user' => $request->user()]);
+        $user = $request->user();
+        // The apps read manual_override_granted, so send the effective value: false once the 24 hours have passed
+        $user->manual_override_granted = $user->hasActiveOverride();
+
+        return response()->json(['user' => $user]);
     }
 
     public function update(Request $request)

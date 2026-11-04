@@ -53,10 +53,16 @@ class SupportController extends Controller
 
         $validator = Validator::make($request->all(), [
             'decision' => 'required|in:approve,deny',
+            'password' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Approving grants the override, so it needs the admin's own password
+        if ($request->decision === 'approve' && !\Illuminate\Support\Facades\Hash::check((string) $request->password, $request->user()->password)) {
+            return response()->json(['message' => 'Incorrect password. The request was not approved.'], 422);
         }
 
         $message->update([

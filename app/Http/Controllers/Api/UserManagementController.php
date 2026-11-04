@@ -327,15 +327,24 @@ class UserManagementController extends Controller
 
         $validator = Validator::make($request->all(), [
             'manual_override_granted' => 'required|boolean',
+            'password' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user->update([
-            'manual_override_granted' => $request->manual_override_granted,
-        ]);
+        $turnOn = $request->boolean('manual_override_granted');
+
+        // Turning it on needs the admin's own password. Turning it off does not
+        if ($turnOn && !Hash::check((string) $request->password, $request->user()->password)) {
+            return response()->json(['message' => 'Incorrect password. The override was not enabled.'], 422);
+        }
+
+        $user->forceFill([
+            'manual_override_granted' => $turnOn,
+            'override_expires_at' => $turnOn ? now()->addHours(24) : null,
+        ])->save();
 
         AuditLog::create([
             'user_id' => $request->user()->id,
