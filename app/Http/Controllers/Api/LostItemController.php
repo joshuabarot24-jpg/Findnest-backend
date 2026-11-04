@@ -12,6 +12,7 @@ class LostItemController extends Controller
     public function index(Request $request)
     {
         $reports = LostItemReport::with('user')
+            ->whereHas('user', fn ($q) => $q->where('role', 'student'))
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->category, fn($q) => $q->where('category', $request->category))
             ->orderBy('created_at', 'desc')
@@ -32,6 +33,14 @@ class LostItemController extends Controller
     public function store(Request $request)
     {
         $isAdmin = in_array($request->user()->role, ['admin', 'super_admin']);
+
+        // Only students report lost items
+        if ($isAdmin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Administrators cannot create lost item reports. Only students can report lost items.',
+            ], 422);
+        }
 
         // An admin can log a report on behalf of a student. A student always reports for themselves
         $owner = $request->user();
