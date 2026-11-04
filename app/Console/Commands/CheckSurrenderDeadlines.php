@@ -18,28 +18,27 @@ class CheckSurrenderDeadlines extends Command
         $overdue = FoundItemRecord::where('receipt_confirmed', false)
             ->whereNotNull('surrender_deadline')
             ->where('surrender_deadline', '<', now())
-            ->where('status', '!=', 'disposed')
+            ->whereNotIn('status', ['disposed', 'unsurrendered_expired'])
             ->get();
 
         $trustService = new TrustScoreService();
 
         foreach ($overdue as $item) {
             $item->update([
-                'status' => 'disposed',
-                'disposal_notes' => 'Auto-rejected: item was not surrendered within the required window.',
-                'disposed_at' => now(),
+                'status' => 'unsurrendered_expired',
+                'disposal_notes' => 'Expired: item was not surrendered within the required window.',
             ]);
 
             $student = \App\Models\User::find($item->admin_id);
 
             if ($student) {
-                $trustService->adjustScore($student, -10, 'Found item report not surrendered within the required window');
+                $trustService->adjustScore($student, -5, 'Found item report not surrendered within the required window');
 
                 Notification::create([
                     'user_id' => $student->id,
                     'match_id' => null,
-                    'title' => 'Found Item Report Rejected',
-                    'message' => 'Your found item report for "' . $item->item_name . '" was automatically rejected because it was not surrendered to the Guidance Office within the required window.',
+                    'title' => 'Found Item Report Expired',
+                    'message' => 'Your report for "' . $item->item_name . '" has expired because it was not surrendered to the Guidance Office within 2 school days. Your Trust Score has been deducted by 5 points. Please surrender items as soon as possible to maintain a healthy score.',
                     'type' => 'status',
                     'is_read' => false,
                     'sent_at' => Carbon::now(),

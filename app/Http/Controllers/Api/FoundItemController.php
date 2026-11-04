@@ -163,6 +163,11 @@ class FoundItemController extends Controller
     {
         $record = FoundItemRecord::findOrFail($id);
 
+        // An item that was never received cannot be moved to disposal or disposed
+        if (!$record->receipt_confirmed && in_array($request->input('status'), ['for_disposal', 'disposed'], true)) {
+            return response()->json(['message' => 'An item that was never received cannot be disposed.'], 422);
+        }
+
         $record->update($request->only([
             'item_name', 'category', 'description',
             'location_found', 'date_found', 'photo_url', 'photo_urls',
@@ -214,6 +219,11 @@ class FoundItemController extends Controller
         }
 
         $record = FoundItemRecord::findOrFail($id);
+
+        if (!$record->receipt_confirmed) {
+            return response()->json(['message' => 'An item that was never received cannot be disposed.'], 422);
+        }
+
         $record->update([
             'status' => 'disposed',
             'disposal_notes' => $request->disposal_notes,
