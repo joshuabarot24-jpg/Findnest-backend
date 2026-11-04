@@ -81,11 +81,16 @@ class LostItemController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if ($owner->role === 'student' && app(\App\Services\DuplicateReportGuard::class)->exists($owner->id, $request->item_name, $request->category, $request->photo_url)) {
+        if (app(\App\Services\DuplicateReportGuard::class)->lostDuplicate($owner->id, [
+            'item_name' => $request->item_name,
+            'category' => $request->category,
+            'primary_color' => $request->primary_color,
+            'photo_url' => $request->photo_url,
+        ], $owner->role === 'student')) {
             return response()->json([
                 'success' => false,
                 'error_code' => 'DUPLICATE_REPORT_DETECTED',
-                'message' => 'Duplicate report detected. You already submitted a matching report in the last 15 minutes. Please wait, or go back and change the details if this is a different item.',
+                'message' => 'Duplicate report detected. An active report for this item has already been logged recently. If this is a different item, change the details or delete the earlier report first.',
             ], 422);
         }
 

@@ -96,11 +96,16 @@ class FoundItemController extends Controller
         // Only an admin can record a confiscated item. A student's report is always a normal found report
         $isConfiscated = !$isStudent && $request->input('status') === 'confiscated';
 
-        if ($isStudent && app(\App\Services\DuplicateReportGuard::class)->exists($request->user()->id, $request->item_name, $request->category, $request->photo_url)) {
+        if (!$isConfiscated && app(\App\Services\DuplicateReportGuard::class)->foundDuplicate($request->user()->id, [
+            'item_name' => $request->item_name,
+            'category' => $request->category,
+            'primary_color' => $request->primary_color,
+            'photo_url' => $request->photo_url,
+        ], $isStudent)) {
             return response()->json([
                 'success' => false,
                 'error_code' => 'DUPLICATE_REPORT_DETECTED',
-                'message' => 'Duplicate report detected. You already submitted a matching report in the last 15 minutes. Please wait, or go back and change the details if this is a different item.',
+                'message' => 'Duplicate report detected. An active report for this item has already been logged recently. If this is a different item, change the details or delete the earlier report first.',
             ], 422);
         }
 

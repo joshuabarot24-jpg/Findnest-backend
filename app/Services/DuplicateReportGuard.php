@@ -7,28 +7,67 @@ use Carbon\Carbon;
 
 class DuplicateReportGuard
 {
-    private const WINDOW_MINUTES = 15;
+    private const CROSS_TYPE_WINDOW_MINUTES = 15;
 
-    // True if this student already logged a matching report (lost or found) in the last 15 minutes
-    public function exists(int $userId, ?string $itemName, ?string $category, ?string $photoUrl): bool
+    // New lost report: duplicate of an active lost report of the same owner
+    public function lostDuplicate(int $ownerId, array $item, bool $checkRecentFound): bool
     {
-        $since = Carbon::now()->subMinutes(self::WINDOW_MINUTES);
+        $active = LostItemReport::where('user_id', $ownerId)
+            ->where('status', 'searching')
+            ->get(['item_name', 'category', 'primary_color', 'photo_url']);
 
-        $lost = LostItemReport::where('user_id', $userId)
-            ->where('created_at', '>=', $since)
-            ->get(['item_name', 'category', 'photo_url']);
+        if ($this->anyMatch($active, $item)) {
+            return true;
+        }
 
-        $found = FoundItemRecord::where('admin_id', $userId)
-            ->where('created_at', '>=', $since)
-            ->get(['item_name', 'category', 'photo_url']);
+        if ($checkRecentFound) {
+            $recent = FoundItemRecord::where('admin_id', $ownerId)
+                ->where('created_at', '>=', Carbon::now()->subMinutes(self::CROSS_TYPE_WINDOW_MINUTES))
+                ->whereNotIn('status', ['confiscated', 'others'])
+                ->get(['item_name', 'category', 'primary_color', 'photo_url']);
 
-        $mine = $this->normalize($itemName);
+            return $this->anyMatch($recent, $item);
+        }
 
-        foreach ($lost->concat($found) as $r) {
-            if ($photoUrl && $r->photo_url === $photoUrl) {
+        return false;
+    }
+
+    // New found item: duplicate of an active found item logged by the same account
+    public function foundDuplicate(int $userId, array $item, bool $checkRecentLost): bool
+    {
+        $active = FoundItemRecord::where('admin_id', $userId)
+            ->where('status', 'unclaimed')
+            ->get(['item_name', 'category', 'primary_color', 'photo_url']);
+
+        if ($this->anyMatch($active, $item)) {
+            return true;
+        }
+
+        if ($checkRecentLost) {
+            $recent = LostItemReport::where('user_id', $userId)
+                ->where('created_at', '>=', Carbon::now()->subMinutes(self::CROSS_TYPE_WINDOW_MINUTES))
+                ->get(['item_name', 'category', 'primary_color', 'photo_url']);
+
+            return $this->anyMatch($recent, $item);
+        }
+
+        return false;
+    }
+
+    private function anyMatch($records, array $item): bool
+    {
+        $mine = $this->normalize($item['item_name'] ?? null);
+        $myColor = $this->normalize($item['primary_color'] ?? null);
+
+        foreach ($records as $r) {
+            if (!empty($item['photo_url']) && $r->photo_url === $item['photo_url']) {
                 return true;
             }
-            if ($r->category !== $category) {
+            if ($r->category !== ($item['category'] ?? null)) {
+                continue;
+            }
+            $theirColor = $this->normalize($r->primary_color);
+            if ($myColor !== '' && $theirColor !== '' && $myColor !== $theirColor) {
                 continue;
             }
             similar_text($mine, $this->normalize($r->item_name), $percent);
@@ -41,9 +80,9 @@ class DuplicateReportGuard
     }
 
     // Lowercase, letters and numbers only, words sorted, so word order does not matter
-    private function normalize(?string $name): string
+    private function normalize(?string $text): string
     {
-        $clean = strtolower(preg_replace('/[^a-z0-9]+/i', ' ', (string) $name));
+        $clean = strtolower(preg_replace('/[^a-z0-9]+/i', ' ', (string) $text));
         $words = array_values(array_filter(explode(' ', trim($clean))));
         sort($words);
         return implode(' ', $words);
