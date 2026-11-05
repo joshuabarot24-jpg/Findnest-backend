@@ -16,8 +16,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.privilege' => \App\Http\Middleware\CheckAdminPrivilege::class,
         ]);
 
-        // Runs on every API route. It only acts on students who still have a temporary password
-        $middleware->appendToGroup('api', \App\Http\Middleware\EnsurePasswordIsUpdated::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
