@@ -193,19 +193,39 @@ class FoundItemController extends Controller
     public function destroy(Request $request, $id)
     {
         $record = FoundItemRecord::findOrFail($id);
+
+        // The admin must acknowledge the removal. The server checks it too
+        if (!$request->boolean('confirmed')) {
+            return response()->json(['message' => 'Please confirm the removal before deleting this item.'], 422);
+        }
+
+        // An approved claim waiting for pickup would be stranded
+        $pickupWaiting = \App\Models\Claim::where('claim_status', 'approved')
+            ->whereNull('collected_at')
+            ->whereIn('match_id', \App\Models\AiMatch::where('found_id', $record->id)->pluck('id'))
+            ->exists();
+        if ($pickupWaiting) {
+            return response()->json(['message' => 'This item has an approved claim waiting for pickup and cannot be removed.'], 422);
+        }
+
+        // Close open matches so no student is left with a match to a removed item
+        \App\Models\AiMatch::where('found_id', $record->id)
+            ->whereIn('match_status', ['pending', 'confirmed'])
+            ->update(['match_status' => 'rejected']);
+
         $record->delete();
 
         AuditLog::create([
             'user_id' => $request->user()->id,
-            'action' => 'Found Item Record Deleted',
+            'action' => 'Item Removed to Digital Records',
             'target_type' => 'found_item_records',
             'target_id' => $id,
-            'details' => 'Record deleted for: ' . $record->item_name,
-            'performed_by' => $request->user()->name,
+            'details' => 'Admin removed "' . $record->item_name . '" from active Item Management. The record is preserved for audit compliance.',
+            'performed_by' => 'Admin: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        return response()->json(['message' => 'Record deleted successfully']);
+        return response()->json(['message' => 'Item removed and archived in Digital Records']);
     }
 
     public function documentDisposal(Request $request, $id)
