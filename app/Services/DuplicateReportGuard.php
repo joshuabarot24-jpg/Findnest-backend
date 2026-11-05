@@ -36,7 +36,7 @@ class DuplicateReportGuard
     public function foundDuplicate(int $userId, array $item, bool $checkRecentLost): bool
     {
         $active = FoundItemRecord::where('admin_id', $userId)
-            ->where('status', 'unclaimed')
+            ->whereIn('status', ['unclaimed', 'waiting_for_surrender'])
             ->get(['item_name', 'category', 'primary_color', 'photo_url']);
 
         if ($this->anyMatch($active, $item)) {

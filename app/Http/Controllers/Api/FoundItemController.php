@@ -51,7 +51,7 @@ class FoundItemController extends Controller
     {
         if ($request->user()->role === 'student') {
             $activeCount = FoundItemRecord::where('admin_id', $request->user()->id)
-                ->where('status', 'unclaimed')
+                ->whereIn('status', ['unclaimed', 'waiting_for_surrender'])
                 ->count();
 
             if ($activeCount >= 5) {
@@ -128,7 +128,7 @@ class FoundItemController extends Controller
             'storage_location' => $request->storage_location,
             'student_name' => $isConfiscated ? $request->student_name : null,
             'violation_notes' => $isConfiscated ? $request->violation_notes : null,
-            'status' => $isConfiscated ? 'confiscated' : 'unclaimed',
+            'status' => $isConfiscated ? 'confiscated' : ($isStudent ? 'waiting_for_surrender' : 'unclaimed'),
         ]);
 
         AuditLog::create([
@@ -255,6 +255,7 @@ class FoundItemController extends Controller
             'receipt_confirmed' => true,
             'receipt_confirmed_at' => now(),
             'surrender_deadline' => null,
+            'status' => $record->status === 'waiting_for_surrender' ? 'unclaimed' : $record->status,
         ]);
 
         AuditLog::create([
