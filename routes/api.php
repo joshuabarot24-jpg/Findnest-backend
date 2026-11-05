@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsurePasswordIsUpdated:
         Route::post('/change-password', [ProfileController::class, 'changePassword']);
         Route::post('/request-password-change', [ProfileController::class, 'requestPasswordChange']);
         Route::post('/set-new-password', [ProfileController::class, 'setNewPassword']);
+        Route::post('/send-password-otp', [ProfileController::class, 'sendPasswordOtp']);
         Route::post('/verify-id', [ProfileController::class, 'verifyId']);
         Route::post('/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/photo', [ProfileController::class, 'removePhoto']);

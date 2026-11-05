@@ -158,6 +158,31 @@ class ProfileController extends Controller
 
         return response()->json(['message' => 'Your password change request has been sent to the Super Admin.']);
     }
+    // Emails a fresh code to a student who must change a temporary password
+    public function sendPasswordOtp(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->password_is_temporary) {
+            return response()->json(['message' => 'A verification code is not needed.'], 403);
+        }
+
+        if ($user->otp_expires_at) {
+            $sentAt = \Carbon\Carbon::parse($user->otp_expires_at)->subMinutes(10);
+            $since = $sentAt->diffInSeconds(now(), false);
+            if ($since >= 0 && $since < 60) {
+                return response()->json([
+                    'message' => 'Please wait before requesting another code.',
+                    'retry_after' => (int) (60 - $since),
+                ], 429);
+            }
+        }
+
+        \App\Services\OtpMailer::send($user);
+
+        return response()->json(['message' => 'A 6-digit verification code has been sent to your registered email address.']);
+    }
+
     public function setNewPassword(Request $request)
     {
         $user = $request->user();
@@ -175,6 +200,19 @@ class ProfileController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // A temporary password also needs the code sent to the student's email
+        if ($isTemporary) {
+            $code = (string) $request->input('otp_code');
+            $valid = $user->otp_code
+                && hash_equals((string) $user->otp_code, $code)
+                && $user->otp_expires_at
+                && now()->lt(\Carbon\Carbon::parse($user->otp_expires_at));
+
+            if (!$valid) {
+                return response()->json(['message' => 'Invalid or expired verification code. Please request a new one.'], 422);
+            }
+        }
+
         if (Hash::check($request->new_password, $user->password)) {
             return response()->json(['message' => 'Your new password must be different from your current one.'], 422);
         }
@@ -186,7 +224,7 @@ class ProfileController extends Controller
             'password_change_approved' => false,
             'password_change_reason' => null,
         ]);
-        $user->forceFill(['password_is_temporary' => false])->save();
+        $user->forceFill(['password_is_temporary' => false, 'otp_code' => null, 'otp_expires_at' => null])->save();
 
         AuditLog::create([
             'user_id' => $user->id,
