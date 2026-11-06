@@ -12,12 +12,21 @@ class InventoryController extends Controller
     private function rules(): array
     {
         return [
-            'name' => 'required|string|max:255',
+            'name' => ['required', 'string', 'max:255', 'regex:/(?:[A-Za-z].*){3}/'],
             'description' => 'nullable|string|max:2000',
             'category' => 'required|string|max:100',
-            'quantity' => 'required|integer|min:0|max:100000',
-            'location' => 'nullable|string|max:255',
-            'status' => 'required|in:in_stock,in_use,disposed',
+            'quantity' => 'required|integer|min:1|max:100000',
+            'location' => ['nullable', 'string', 'max:255', 'regex:/[A-Za-z]/'],
+            'status' => 'nullable|in:in_stock,in_use,disposed',
+        ];
+    }
+
+    private function messages(): array
+    {
+        return [
+            'name.regex' => 'Item name must contain letters and be at least 3 characters long.',
+            'location.regex' => "Location must be a descriptive location (e.g., 'Shelf 1' or 'Main Office') and cannot be purely numbers.",
+            'quantity.min' => 'Quantity must be at least 1.',
         ];
     }
 
@@ -29,7 +38,7 @@ class InventoryController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), $this->rules());
+        $validator = Validator::make($request->all(), $this->rules(), $this->messages());
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
@@ -45,7 +54,7 @@ class InventoryController extends Controller
     {
         $item = InventoryItem::findOrFail($id);
 
-        $validator = Validator::make($request->all(), $this->rules());
+        $validator = Validator::make($request->all(), $this->rules(), $this->messages());
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
