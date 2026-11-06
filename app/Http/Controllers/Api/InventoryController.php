@@ -70,12 +70,23 @@ class InventoryController extends Controller
     public function destroy(Request $request, $id)
     {
         $item = InventoryItem::findOrFail($id);
+
+        // The admin must acknowledge the removal. The server checks it too
+        if (!$request->boolean('confirmed')) {
+            return response()->json(['message' => 'Please confirm the removal before deleting this item.'], 422);
+        }
+
         $name = $item->name;
         $item->delete();
 
-        $this->log($request, 'Inventory Item Deleted', $item, 'Deleted inventory item: ' . $name);
+        $this->log(
+            $request,
+            'Inventory Item Removed to Digital Records',
+            $item,
+            'Admin removed inventory item "' . $name . '" (qty ' . $item->quantity . ', ' . ($item->location ?: 'no location') . '). The record is preserved for audit compliance.'
+        );
 
-        return response()->json(['message' => 'Inventory item deleted']);
+        return response()->json(['message' => 'Inventory item removed and archived in Digital Records']);
     }
 
     private function log(Request $request, string $action, InventoryItem $item, string $details): void
