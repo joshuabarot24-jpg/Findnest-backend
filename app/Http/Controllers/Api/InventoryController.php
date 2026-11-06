@@ -12,7 +12,7 @@ class InventoryController extends Controller
     private function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z](?:.*[A-Za-z]){2}/'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^(?=(?:.*[A-Za-z]){3})[A-Za-z][A-Za-z \-.,&()]*$/'],
             'description' => 'nullable|string|max:2000',
             'category' => 'required|string|max:100',
             'quantity' => 'required|integer|min:1|max:100000',
@@ -24,7 +24,7 @@ class InventoryController extends Controller
     private function messages(): array
     {
         return [
-            'name.regex' => 'Item name must start with a letter and contain at least 3 letters.',
+            'name.regex' => 'Item name can only contain letters (no numbers) and must have at least 3 letters.',
             'location.required' => 'Location is required.',
             'location.regex' => "Location must be a descriptive location (e.g., 'Shelf 1' or 'Main Office') and cannot be purely numbers.",
             'quantity.min' => 'Quantity must be at least 1.',
