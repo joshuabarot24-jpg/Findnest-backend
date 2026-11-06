@@ -97,19 +97,35 @@ class ProfileController extends Controller
         return response()->json(['message' => 'Profile photo removed.', 'user' => $user->fresh()]);
     }
 
-    public function changePassword(Request $request)
+        public function changePassword(Request $request)
     {
         $user = $request->user();
 
-        if ($user->role === 'student') {
-            return response()->json([
-                'message' => 'Students cannot change their password directly. Please submit a password change request instead.',
-            ], 403);
+        // Admins keep the original behaviour
+        if ($user->role !== 'student') {
+            $validator = Validator::make($request->all(), [
+                'current_password' => 'required|string',
+                'new_password'     => 'required|string|min:8|confirmed',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            if (!Hash::check($request->current_password, $user->password)) {
+                return response()->json(['message' => 'Current password is incorrect.'], 422);
+            }
+
+            $user->update(['password' => Hash::make($request->new_password)]);
+
+            return response()->json(['message' => 'Password changed successfully']);
         }
 
+        // Students change their own password with their current password and an email code
         $validator = Validator::make($request->all(), [
             'current_password' => 'required|string',
-            'new_password'     => 'required|string|min:8|confirmed',
+            'new_password' => ['required', 'string', new \App\Rules\StrongPassword(), 'confirmed'],
+            'otp_code' => 'required|string',
         ]);
 
         if ($validator->fails()) {
@@ -117,12 +133,42 @@ class ProfileController extends Controller
         }
 
         if (!Hash::check($request->current_password, $user->password)) {
-            return response()->json(['message' => 'Current password is incorrect.'], 422);
+            return response()->json(['message' => 'Current password does not match our records.'], 422);
         }
 
-        $user->update(['password' => Hash::make($request->new_password)]);
+        $valid = $user->otp_code
+            && hash_equals((string) $user->otp_code, (string) $request->otp_code)
+            && $user->otp_expires_at
+            && now()->lt(\Carbon\Carbon::parse($user->otp_expires_at));
 
-        return response()->json(['message' => 'Password changed successfully']);
+        if (!$valid) {
+            return response()->json(['message' => 'Invalid or expired verification code.'], 422);
+        }
+
+        if (Hash::check($request->new_password, $user->password)) {
+            return response()->json(['message' => 'Your new password must be different from your current one.'], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password),
+            'password_last_changed_at' => now(),
+            'password_change_requested' => false,
+            'password_change_approved' => false,
+            'password_change_reason' => null,
+        ]);
+        $user->forceFill(['otp_code' => null, 'otp_expires_at' => null])->save();
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'Password Changed',
+            'target_type' => 'users',
+            'target_id' => $user->id,
+            'details' => 'Student changed their own password after email verification',
+            'performed_by' => 'Student: ' . $user->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Password updated successfully.']);
     }
 
     public function requestPasswordChange(Request $request)
@@ -163,7 +209,7 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->password_is_temporary) {
+        if ($user->role !== 'student') {
             return response()->json(['message' => 'A verification code is not needed.'], 403);
         }
 
