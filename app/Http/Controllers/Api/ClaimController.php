@@ -114,7 +114,7 @@ class ClaimController extends Controller
 
         $validator = Validator::make($request->all(), [
             'match_id' => 'required|exists:ai_matches,id',
-            'proof_description' => 'required|string',
+            'proof_description' => 'nullable|string|max:100',
             'proof_photo_url' => 'nullable|string',
             'proof_photo_urls' => 'nullable|array',
             'proof_photo_urls.*' => 'string',
@@ -122,6 +122,11 @@ class ClaimController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // At least one evidence photo is required
+        if (empty($request->proof_photo_urls) && empty($request->proof_photo_url)) {
+            return response()->json(['message' => 'Please upload at least one evidence photo.'], 422);
         }
 
         $existing = Claim::where('match_id', $request->match_id)
@@ -135,7 +140,7 @@ class ClaimController extends Controller
         $claim = Claim::create([
             'match_id' => $request->match_id,
             'student_id' => $request->user()->id,
-            'proof_description' => $request->proof_description,
+            'proof_description' => $request->proof_description ?? '',
             'proof_photo_url' => $request->proof_photo_url,
             'proof_photo_urls' => $request->proof_photo_urls ?? ($request->proof_photo_url ? [$request->proof_photo_url] : null),
             'claim_status' => 'pending',
