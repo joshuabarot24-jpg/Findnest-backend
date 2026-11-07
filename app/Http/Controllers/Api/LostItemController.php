@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LostItemReport;
 use App\Models\AuditLog;
+use App\Support\BlurredCopy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -11,12 +12,27 @@ class LostItemController extends Controller
 {
     public function index(Request $request)
     {
-        $reports = LostItemReport::with('user')
+        $isStudent = $request->user()->role === 'student';
+
+        $reports = LostItemReport::with($isStudent ? 'user:id,name' : 'user')
             ->whereHas('user', fn ($q) => $q->where('role', 'student'))
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->category, fn($q) => $q->where('category', $request->category))
             ->orderBy('created_at', 'desc')
             ->get();
+
+        // A student never receives another student's original photo, only the separate blurred copy
+        if ($isStudent) {
+            $me = $request->user()->id;
+            foreach ($reports as $r) {
+                /** @var LostItemReport $r */
+                if ($r->user_id !== $me) {
+                    $r->photo_url = $r->blurred_photo_url;
+                    $r->photo_urls = [];
+                    $r->makeHidden(['ai_description', 'description', 'brand_model', 'blurred_photo_url']);
+                }
+            }
+        }
 
         return response()->json(['reports' => $reports]);
     }
@@ -42,26 +58,17 @@ class LostItemController extends Controller
             ], 422);
         }
 
-        // An admin can log a report on behalf of a student. A student always reports for themselves
         $owner = $request->user();
-        if ($isAdmin && $request->filled('student_id')) {
-            $owner = \App\Models\User::where('id', $request->student_id)->where('role', 'student')->first();
-            if (!$owner) {
-                return response()->json(['message' => 'The selected student could not be found.'], 422);
-            }
-        }
 
         // The 5 active reports limit applies to the student who owns the report
-        if ($owner->role === 'student') {
-            $activeCount = LostItemReport::where('user_id', $owner->id)
-                ->where('status', 'searching')
-                ->count();
+        $activeCount = LostItemReport::where('user_id', $owner->id)
+            ->where('status', 'searching')
+            ->count();
 
-            if ($activeCount >= 5) {
-                return response()->json([
-                    'message' => 'You have reached the limit of 5 active lost item reports. Please wait for an existing report to be resolved before submitting a new one.',
-                ], 422);
-            }
+        if ($activeCount >= 5) {
+            return response()->json([
+                'message' => 'You have reached the limit of 5 active lost item reports. Please wait for an existing report to be resolved before submitting a new one.',
+            ], 422);
         }
 
         $validator = Validator::make($request->all(), [
@@ -95,7 +102,7 @@ class LostItemController extends Controller
             'category' => $request->category,
             'primary_color' => $request->primary_color,
             'photo_url' => $request->photo_url,
-        ], $owner->role === 'student')) {
+        ], true)) {
             return response()->json([
                 'success' => false,
                 'error_code' => 'DUPLICATE_REPORT_DETECTED',
@@ -104,7 +111,7 @@ class LostItemController extends Controller
         }
 
         $report = LostItemReport::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $owner->id,
             'item_name' => $request->item_name,
             'category' => $request->category,
             'description' => $request->description,
@@ -115,6 +122,7 @@ class LostItemController extends Controller
             'primary_color' => $request->primary_color,
             'brand_model' => $request->brand_model,
             'photo_url' => $request->photo_url,
+            'blurred_photo_url' => BlurredCopy::make($request->photo_url),
             'photo_urls' => $request->photo_urls ?? ($request->photo_url ? [$request->photo_url] : null),
             'status' => 'searching',
             'submitted_via_override' => $owner->hasActiveOverride(),
@@ -125,10 +133,8 @@ class LostItemController extends Controller
             'action' => 'Lost Item Reported',
             'target_type' => 'lost_item_reports',
             'target_id' => $report->id,
-            'details' => $owner->id !== $request->user()->id
-            ? 'Admin logged a lost item for ' . $owner->name . ': ' . $report->item_name . ' at ' . $report->location_lost
-            : 'Student reported lost item: ' . $report->item_name . ' and ' . $report->location_lost,
-            'performed_by' => ($isAdmin ? 'Admin' : 'Student') . ': ' . $request->user()->name,
+            'details' => 'Student reported lost item: ' . $report->item_name . ' and ' . $report->location_lost,
+            'performed_by' => 'Student: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
@@ -165,6 +171,11 @@ class LostItemController extends Controller
             'item_name', 'category', 'description',
             'location_lost', 'date_lost', 'photo_url', 'photo_urls', 'status'
         ]));
+
+        // A new photo needs a new blurred copy
+        if ($request->filled('photo_url') && $report->wasChanged('photo_url')) {
+            $report->forceFill(['blurred_photo_url' => BlurredCopy::make($report->photo_url)])->save();
+        }
 
         AuditLog::create([
             'user_id' => $request->user()->id,
