@@ -91,6 +91,11 @@ class FoundItemController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $timeError = \App\Support\ReportTime::error($request->approx_time, $request->date_found);
+        if ($timeError) {
+            return response()->json(['errors' => ['approx_time' => [$timeError]]], 422);
+        }
+
         $isStudent = $request->user()->role === 'student';
 
         // Only an admin can record a confiscated item. A student's report is always a normal found report

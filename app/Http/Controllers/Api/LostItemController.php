@@ -97,6 +97,11 @@ class LostItemController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $timeError = \App\Support\ReportTime::error($request->approx_time, $request->date_lost);
+        if ($timeError) {
+            return response()->json(['errors' => ['approx_time' => [$timeError]]], 422);
+        }
+
         if (app(\App\Services\DuplicateReportGuard::class)->lostDuplicate($owner->id, [
             'item_name' => $request->item_name,
             'category' => $request->category,
