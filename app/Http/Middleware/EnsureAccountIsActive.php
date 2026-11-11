@@ -15,8 +15,15 @@ class EnsureAccountIsActive
 
             if (!$user->is_active) {
                 $reason = 'This account has been archived. Please contact the Super Admin.';
-            } elseif (in_array($user->role, ['admin', 'super_admin'], true) && $user->is_restricted) {
-                $reason = 'Your account has been suspended by the Super Admin. Please contact them for assistance.';
+            } elseif ($user->is_restricted) {
+                if ($user->restricted_until && now()->isAfter($user->restricted_until)) {
+                    // The restriction has run out: lift it and let the request through
+                    $user->update(['is_restricted' => false, 'restriction_reason' => null, 'restricted_until' => null]);
+                } elseif ($user->role === 'student') {
+                    $reason = 'Your account has been restricted. Please contact the Guidance Office for assistance.';
+                } else {
+                    $reason = 'Your account has been suspended by the Super Admin. Please contact them for assistance.';
+                }
             }
 
             if ($reason) {
