@@ -54,15 +54,13 @@ class ProfileController extends Controller
         $validator = Validator::make($request->all(), [
             'name'       => 'sometimes|string|max:255',
             'school_id'  => 'sometimes|nullable|string|max:50',
-            'course'     => 'sometimes|nullable|string|max:100',
-            'year_level' => 'sometimes|nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user->update($request->only(['name', 'school_id', 'course', 'year_level']));
+        $user->update($request->only(['name', 'school_id']));
 
         return response()->json([
             'message' => 'Profile updated successfully',

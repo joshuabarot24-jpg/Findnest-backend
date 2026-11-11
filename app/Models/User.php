@@ -21,8 +21,6 @@ class User extends Authenticatable
         'last_name',
         'middle_initial',
         'suffix',
-        'course',
-        'year_level',
         'education_level',
         'is_active',
         'otp_code',
