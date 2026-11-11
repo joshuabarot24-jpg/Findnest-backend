@@ -136,7 +136,7 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Account is deactivated'], 403);
             }
 
-            if ($user->role === 'admin' && $user->is_restricted) {
+            if ($user->role === 'admin' && (new \App\Services\TrustScoreService())->isRestricted($user)) {
                 return response()->json(['message' => 'Your account has been suspended by the Super Admin. Please contact them for assistance.'], 403);
             }
 
@@ -265,7 +265,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated'], 403);
         }
 
-        if ($user->is_restricted) {
+        if ((new \App\Services\TrustScoreService())->isRestricted($user)) {
             return response()->json(['message' => 'Your account has been suspended by the Super Admin. Please contact them for assistance.'], 403);
         }
 
