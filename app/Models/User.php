@@ -91,7 +91,10 @@ class User extends Authenticatable
     {
         static::saving(function (User $user) {
             if ($user->first_name || $user->last_name) {
-                $user->name = trim(implode(' ', array_filter([$user->first_name, $user->last_name, $user->suffix])));
+                // "Rick G. Gallardo Jr." : first name, middle initial with a period, last name, suffix
+                $mi = trim((string) $user->middle_initial);
+                $mi = $mi !== '' ? rtrim($mi, '.') . '.' : null;
+                $user->name = trim(implode(' ', array_filter([$user->first_name, $mi, $user->last_name, $user->suffix])));
             }
         });
     }
