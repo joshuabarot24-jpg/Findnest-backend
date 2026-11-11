@@ -7,7 +7,7 @@ use App\Models\AuditLog;
 use App\Models\LostItemReport;
 use App\Models\FoundItemRecord;
 use App\Models\Claim;
-use App\Rules\GmailOnly;
+use App\Rules\AllowedEmailProvider;
 use App\Rules\StrongPassword;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -34,7 +34,7 @@ class UserManagementController extends Controller
             'last_name' => 'required_with:first_name|nullable|string|max:50',
             'middle_initial' => 'nullable|string|max:5',
             'suffix' => 'nullable|string|max:10',
-            'email' => ['required', 'email', 'unique:users,email', new GmailOnly()],
+            'email' => ['required', 'email', 'unique:users,email', new AllowedEmailProvider()],
             'password' => ['required', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
             'lrn' => 'nullable|string|max:20|unique:users,lrn',
@@ -47,6 +47,14 @@ class UserManagementController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        if (in_array($request->role, ['admin', 'super_admin'], true) && \App\Support\StaffLimit::full($request->role)) {
+            return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
+        }
+
+        if (in_array($request->role, ['admin', 'super_admin'], true) && \App\Support\StaffLimit::full($request->role)) {
+            return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
         }
 
         $user = User::create([
@@ -104,7 +112,7 @@ class UserManagementController extends Controller
             'last_name' => 'required_with:first_name|nullable|string|max:50',
             'middle_initial' => 'nullable|string|max:5',
             'suffix' => 'nullable|string|max:10',
-            'email' => ['required', 'email', 'unique:users,email,' . $id, new GmailOnly($user->email)],
+            'email' => ['required', 'email', 'unique:users,email,' . $id, new AllowedEmailProvider($user->email)],
             'password' => ['nullable', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
             'lrn' => 'nullable|string|max:20|unique:users,lrn,' . $id,
@@ -117,6 +125,16 @@ class UserManagementController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+         if (in_array($request->role, ['admin', 'super_admin'], true) && $request->role !== $user->role
+            && \App\Support\StaffLimit::full($request->role, $user->id)) {
+            return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
+        }
+
+        if (in_array($request->role, ['admin', 'super_admin'], true) && $request->role !== $user->role
+            && \App\Support\StaffLimit::full($request->role, $user->id)) {
+            return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
         }
 
         // The old form sends only name. The new form sends the split names
@@ -201,6 +219,11 @@ class UserManagementController extends Controller
     public function restore(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if (in_array($user->role, ['admin', 'super_admin'], true) && !$user->is_active
+            && \App\Support\StaffLimit::full($user->role, $user->id)) {
+            return response()->json(['message' => \App\Support\StaffLimit::message($user->role)], 422);
+        }
         $isStudent = $user->role === 'student';
 
         if ($isStudent) {

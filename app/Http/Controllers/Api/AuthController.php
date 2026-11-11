@@ -51,6 +51,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated'], 403);
         }
 
+        if (!\App\Support\DemoAccounts::skipsOtp($user->email)) {
+            return $this->staffOtpStep($user);
+        }
+
         $user->tokens()->delete();
 
         $token = $user->createToken('super-admin-token')->plainTextToken;
@@ -140,6 +144,10 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Your account has been suspended by the Super Admin. Please contact them for assistance.'], 403);
             }
 
+            if (!\App\Support\DemoAccounts::skipsOtp($user->email)) {
+                return $this->staffOtpStep($user);
+            }
+
             $user->tokens()->delete();
             $tokenName = $user->role === 'super_admin' ? 'super-admin-token' : 'admin-token';
             $token = $user->createToken($tokenName)->plainTextToken;
@@ -214,6 +222,50 @@ class AuthController extends Controller
         ]);
     }
 
+    // Admin or super admin: send the code instead of a session. The web sends "school_id" (the email) back with it
+    private function staffOtpStep(User $user)
+    {
+        $this->sendOtpEmail($user);
+        [$name, $domain] = array_pad(explode('@', (string) $user->email, 2), 2, '');
+
+        return response()->json([
+            'message' => 'OTP sent to your registered email',
+            'requires_otp' => true,
+            'email' => substr($name, 0, 2) . str_repeat('*', max(2, strlen($name) - 2)) . '@' . $domain,
+            'school_id' => $user->email,
+        ]);
+    }
+
+    // Creates the session for an admin or super admin, after the code is verified (or for the demo accounts)
+    private function issueStaffSession(User $user, Request $request)
+    {
+        $user->tokens()->delete();
+        $token = $user->createToken($user->role === 'super_admin' ? 'super-admin-token' : 'admin-token')->plainTextToken;
+        $label = ucfirst(str_replace('_', ' ', $user->role));
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => $label . ' Login',
+            'target_type' => 'users',
+            'target_id' => $user->id,
+            'details' => $label . ' logged in successfully',
+            'performed_by' => $label . ': ' . $user->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Login successful',
+            'requires_otp' => false,
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+        ]);
+    }
+
     // Saves a new 6-digit code on the student and emails it
     private function sendOtpEmail(User $user): void
     {
@@ -267,6 +319,10 @@ class AuthController extends Controller
 
         if ((new \App\Services\TrustScoreService())->isRestricted($user)) {
             return response()->json(['message' => 'Your account has been suspended by the Super Admin. Please contact them for assistance.'], 403);
+        }
+
+        if (!\App\Support\DemoAccounts::skipsOtp($user->email)) {
+            return $this->staffOtpStep($user);
         }
 
         $user->tokens()->delete();
@@ -324,10 +380,13 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = $this->findStudentByIdentifier($request->school_id);
+        $staff = str_contains($request->school_id, '@')
+            ? User::where('email', $request->school_id)->whereIn('role', ['admin', 'super_admin'])->first()
+            : null;
+        $user = $staff ?: $this->findStudentByIdentifier($request->school_id);
 
         if (!$user) {
-            return response()->json(['message' => 'Student not found'], 404);
+            return response()->json(['message' => 'Account not found'], 404);
         }
 
         if ($user->otp_code !== $request->otp) {
@@ -344,6 +403,10 @@ class AuthController extends Controller
             'otp_code' => null,
             'otp_expires_at' => null,
         ]);
+
+        if ($user->role !== 'student') {
+            return $this->issueStaffSession($user, $request);
+        }
 
         $token = $user->createToken('student-token')->plainTextToken;
 
@@ -381,10 +444,13 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = $this->findStudentByIdentifier($request->school_id);
+        $staff = str_contains($request->school_id, '@')
+            ? User::where('email', $request->school_id)->whereIn('role', ['admin', 'super_admin'])->first()
+            : null;
+        $user = $staff ?: $this->findStudentByIdentifier($request->school_id);
 
         if (!$user) {
-            return response()->json(['message' => 'Student not found'], 404);
+            return response()->json(['message' => 'Account not found'], 404);
         }
 
         if ($user->otp_expires_at) {
