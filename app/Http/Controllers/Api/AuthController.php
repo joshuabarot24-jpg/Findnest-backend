@@ -199,7 +199,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated'], 403);
         }
 
-        if ($user->is_restricted) {
+        // isRestricted() also lifts a restriction whose days have run out
+        if ((new \App\Services\TrustScoreService())->isRestricted($user)) {
             return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
         }
 
