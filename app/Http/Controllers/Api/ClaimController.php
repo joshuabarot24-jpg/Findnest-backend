@@ -46,6 +46,10 @@ class ClaimController extends Controller
                 if ($bScore === null) return -1;
                 return ($bScore <=> $aScore) ?: ($a->created_at <=> $b->created_at);
             })->values();
+            // The first claim stays in the list. The others travel with it, so the modal can switch between claimants
+            $first = $sortedGroup->first();
+            /** @var Claim $first */
+            $first->setRelation('queued_claims', $sortedGroup->slice(1)->values());
             foreach ($sortedGroup->slice(1) as $queuedClaim) {
                 $hiddenClaimIds[] = $queuedClaim->id;
             }
