@@ -82,7 +82,7 @@ class LocationController extends Controller
                 if ($end->lt($start)) {
                     [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
                 }
-                return [$start, $end];
+                return $this->clampWindow($start, $end);
             }
 
             if ($range === 'week') {
@@ -99,13 +99,13 @@ class LocationController extends Controller
             if ($year >= 2000 && $year <= 2100) {
                 $start = Carbon::create($year, $hasMonth ? $month : 1, 1, 0, 0, 0, self::TZ);
                 $end = $hasMonth ? $start->copy()->endOfMonth() : $start->copy()->endOfYear();
-                return [$start, $end];
+                return $this->clampWindow($start, $end);
             }
 
             // A month with no year means that month of the current year
             if ($hasMonth) {
                 $start = Carbon::create($now->year, $month, 1, 0, 0, 0, self::TZ);
-                return [$start, $start->copy()->endOfMonth()];
+                return $this->clampWindow($start, $start->copy()->endOfMonth());
             }
         } catch (\Throwable $e) {
             return null;
@@ -148,6 +148,17 @@ class LocationController extends Controller
             $out[$r->norm] = ['label' => $r->label, 'count' => (int) $r->count];
         }
         return $out;
+    }
+
+    // Reports only exist from 2025 until today, so a period is limited to that range
+    private function clampWindow(Carbon $start, Carbon $end): array
+    {
+        $min = Carbon::create(2025, 1, 1, 0, 0, 0, self::TZ);
+        $max = Carbon::now(self::TZ)->endOfDay();
+        if ($start->lt($min)) $start = $min->copy();
+        if ($end->gt($max)) $end = $max->copy();
+        if ($start->gt($end)) $start = $end->copy()->startOfDay();
+        return [$start, $end];
     }
 
     private function topFrom(string $table, string $column, ?array $window, array $excludeStatuses): array
