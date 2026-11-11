@@ -22,7 +22,7 @@ class AuthController extends Controller
                 if (str_contains($identifier, '@')) {
                     $q->whereRaw('LOWER(email) = ?', [strtolower($identifier)]);
                 } else {
-                    $q->where('school_id', $identifier);
+                    $q->where('lrn', $identifier);
                 }
             })
             ->first();
@@ -94,7 +94,7 @@ class AuthController extends Controller
         if (\App\Models\SystemSetting::get('maintenance_mode', '0') === '1') {
             $user = $isEmail
                 ? User::where('email', $identifier)->first()
-                : User::where('school_id', $identifier)->first();
+                : User::where('lrn', $identifier)->first();
 
             if ($user && $user->role !== 'super_admin') {
                 return response()->json(['message' => 'The system is currently under maintenance. Please try again later.'], 503);

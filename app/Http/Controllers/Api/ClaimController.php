@@ -587,7 +587,7 @@ class ClaimController extends Controller
 
         $revokedUsers = \App\Models\User::where('is_active', false)
             ->where('updated_at', '>=', $thirtyDaysAgo)
-            ->select('id', 'name', 'email', 'role', 'school_id', 'updated_at')
+            ->select('id', 'name', 'email', 'role', 'lrn', 'updated_at')
             ->orderBy('updated_at', 'desc')
             ->get();
 

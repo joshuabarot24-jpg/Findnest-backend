@@ -25,12 +25,19 @@ class UserManagementController extends Controller
     // Creates an account. Emails must be Gmail; passwords follow the standard.
     public function store(Request $request)
     {
+        // Old forms send school_id. New forms send lrn
+        $request->merge(['lrn' => $request->input('lrn', $request->input('school_id'))]);
+
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'required_without:first_name|nullable|string|max:255',
+            'first_name' => 'required_without:name|nullable|string|max:50',
+            'last_name' => 'required_with:first_name|nullable|string|max:50',
+            'middle_initial' => 'nullable|string|max:5',
+            'suffix' => 'nullable|string|max:10',
             'email' => ['required', 'email', 'unique:users,email', new GmailOnly()],
             'password' => ['required', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
-            'school_id' => 'nullable|string|unique:users,school_id',
+            'lrn' => 'nullable|string|max:20|unique:users,lrn',
             'course' => 'nullable|string',
             'year_level' => 'nullable|string',
             'education_level' => 'nullable|in:college,senior_high_school,junior_high_school,high_school',
@@ -45,11 +52,15 @@ class UserManagementController extends Controller
         }
 
         $user = User::create([
-            'name' => $request->name,
+            'name' => $request->name ?: trim($request->first_name . ' ' . $request->last_name),
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'middle_initial' => $request->middle_initial,
+            'suffix' => $request->suffix,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => $request->role,
-            'school_id' => $request->school_id,
+            'lrn' => $request->lrn,
             'course' => $request->course,
             'year_level' => $request->year_level,
             'education_level' => $request->education_level,
@@ -87,12 +98,18 @@ class UserManagementController extends Controller
     {
         $user = User::findOrFail($id);
 
+        $request->merge(['lrn' => $request->input('lrn', $request->input('school_id'))]);
+
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'required_without:first_name|nullable|string|max:255',
+            'first_name' => 'required_without:name|nullable|string|max:50',
+            'last_name' => 'required_with:first_name|nullable|string|max:50',
+            'middle_initial' => 'nullable|string|max:5',
+            'suffix' => 'nullable|string|max:10',
             'email' => ['required', 'email', 'unique:users,email,' . $id, new GmailOnly($user->email)],
             'password' => ['nullable', 'string', new StrongPassword()],
             'role' => 'required|in:super_admin,admin,student',
-            'school_id' => 'nullable|string|unique:users,school_id,' . $id,
+            'lrn' => 'nullable|string|max:20|unique:users,lrn,' . $id,
             'course' => 'nullable|string',
             'year_level' => 'nullable|string',
             'education_level' => 'nullable|in:college,senior_high_school,junior_high_school,high_school',
@@ -106,11 +123,17 @@ class UserManagementController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // The old form sends only name. The new form sends the split names
+        $nameFields = $request->has('first_name')
+            ? $request->only(['first_name', 'last_name', 'middle_initial', 'suffix'])
+            : [];
+
         $user->update([
-            'name' => $request->name,
+            'name' => $request->name ?: $user->name,
+            ...$nameFields,
             'email' => $request->email,
             'role' => $request->role,
-            'school_id' => $request->school_id,
+            'lrn' => $request->lrn,
             'course' => $request->course,
             'year_level' => $request->year_level,
             'education_level' => $request->education_level,

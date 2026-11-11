@@ -201,7 +201,7 @@ class SupportController extends Controller
             ->where(function ($w) use ($like) {
                 $w->where('name', 'ILIKE', $like)
                     ->orWhere('email', 'ILIKE', $like)
-                    ->orWhere('school_id', 'ILIKE', $like);
+                    ->orWhere('lrn', 'ILIKE', $like);
             });
 
         // Active accounts only. Change this if your archive column has a different name
@@ -213,7 +213,7 @@ class SupportController extends Controller
 
         $students = $query->orderBy('name')
             ->limit(8)
-            ->get(['id', 'name', 'email', 'school_id', 'profile_photo_url']);
+            ->get(['id', 'name', 'email', 'lrn', 'profile_photo_url']);
 
         return response()->json(['students' => $students]);
     }
