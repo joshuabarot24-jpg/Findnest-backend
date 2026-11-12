@@ -206,6 +206,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
         }
 
+        if (\App\Support\DemoAccounts::skipsOtp($user->email)) {
+            return $this->issueStudentSession($user, $request);
+        }
+
         $this->sendOtpEmail($user);
 
         return response()->json([
@@ -217,6 +221,37 @@ class AuthController extends Controller
     }
 
     // Admin or super admin: send the code instead of a session. The web sends "school_id" (the email) back with it
+    // Demo student accounts only: a session without the email code
+    private function issueStudentSession(User $user, Request $request)
+    {
+        $user->tokens()->delete();
+        $token = $user->createToken('student-token')->plainTextToken;
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'Student Login',
+            'target_type' => 'users',
+            'target_id' => $user->id,
+            'details' => 'Student logged in (demo account, no email code)',
+            'performed_by' => 'Student: ' . $user->name,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Login successful',
+            'requires_otp' => false,
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'school_id' => $user->school_id,
+                'trust_score' => $user->trust_score,
+            ],
+        ]);
+    }
+
     private function staffOtpStep(User $user)
     {
         $this->sendOtpEmail($user);
