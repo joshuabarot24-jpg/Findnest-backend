@@ -27,6 +27,14 @@ class SupportController extends Controller
 
         $isOverrideRequest = $request->boolean('is_override_request');
 
+        // One pending override request at a time per student
+        if ($isOverrideRequest && $user && SupportMessage::where('user_id', $user->id)
+                ->where('is_override_request', true)
+                ->where('override_status', 'pending')
+                ->exists()) {
+            return response()->json(['message' => 'You already have a pending override request. Please wait for the Guidance Office to review it.'], 422);
+        }
+
         $message = SupportMessage::create([
             'user_id' => $user?->id,
             'name' => $user?->name ?? 'Guest',
@@ -151,7 +159,7 @@ class SupportController extends Controller
         $message = SupportMessage::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'message' => 'required|string',
+            'message' => 'required|string|max:1000',
         ]);
 
         if ($validator->fails()) {
