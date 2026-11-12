@@ -18,6 +18,9 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SupportController;
 
 
+// A tiny route that a free uptime monitor can call so the server stays awake
+Route::get('/ping', fn () => response()->json(['ok' => true]));
+
 Route::prefix('auth')->group(function () {
     Route::post('/super-admin/login', [AuthController::class, 'superAdminLogin']);
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);
