@@ -127,10 +127,7 @@ class AuthController extends Controller
             }
 
             if (!Hash::check($request->password, $user->password)) {
-                $user->increment('failed_login_attempts');
-                if ($user->failed_login_attempts >= 5) {
-                    $user->update(['login_locked_until' => now()->addMinutes(15)]);
-                }
+                \App\Support\LoginLock::fail($user);
                 return response()->json(['message' => 'Invalid credentials'], 401);
             }
 
@@ -194,10 +191,7 @@ class AuthController extends Controller
         }
 
         if (!Hash::check($request->password, $user->password)) {
-            $user->increment('failed_login_attempts');
-            if ($user->failed_login_attempts >= 5) {
-                $user->update(['login_locked_until' => now()->addMinutes(15)]);
-            }
+            \App\Support\LoginLock::fail($user);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
@@ -304,10 +298,7 @@ class AuthController extends Controller
         }
 
         if (!Hash::check($request->password, $user->password)) {
-            $user->increment('failed_login_attempts');
-            if ($user->failed_login_attempts >= 5) {
-                $user->update(['login_locked_until' => now()->addMinutes(15)]);
-            }
+            \App\Support\LoginLock::fail($user);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
