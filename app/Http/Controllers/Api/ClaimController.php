@@ -234,12 +234,12 @@ class ClaimController extends Controller
             'action' => 'Claim Appeal Submitted',
             'target_type' => 'claims',
             'target_id' => $claim->id,
-            'details' => 'Student appealed rejected claim, escalated to super-admin review',
+            'details' => 'Student appealed a rejected claim. The Guidance Office will review it.',
             'performed_by' => 'Student: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
-        return response()->json(['message' => 'Appeal submitted for super-admin review', 'claim' => $claim]);
+        return response()->json(['message' => 'Appeal submitted for review by the Guidance Office', 'claim' => $claim]);
     }
 
     public function getQuestions(Request $request, $id)
