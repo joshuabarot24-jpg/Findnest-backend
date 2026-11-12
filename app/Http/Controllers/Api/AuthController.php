@@ -206,6 +206,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Your account has been restricted. Please contact the Guidance Office for assistance.'], 403);
         }
 
+        if (\App\Support\TrustedDevice::valid($user, $request->input('device_token'))) {
+            return $this->issueStudentSession($user, $request);
+        }
+
         if (\App\Support\DemoAccounts::skipsOtp($user->email)) {
             return $this->issueStudentSession($user, $request);
         }
@@ -436,6 +440,9 @@ class AuthController extends Controller
 
         $token = $user->createToken('student-token')->plainTextToken;
 
+        // Remember me: this phone can skip the email code next time
+        $deviceToken = $request->boolean('remember_me') ? \App\Support\TrustedDevice::issue($user) : null;
+
         AuditLog::create([
             'user_id' => $user->id,
             'action' => 'Student Login',
@@ -449,6 +456,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Login successful',
             'token' => $token,
+            'device_token' => $deviceToken,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
