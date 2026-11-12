@@ -15,7 +15,7 @@ class EnsureAccountIsActive
 
             if (!$user->is_active) {
                 $reason = 'This account has been archived. Please contact the Super Admin.';
-            } elseif ($user->is_restricted) {
+            } elseif ($user->is_restricted && $user->role !== 'super_admin') {
                 if ($user->restricted_until && now()->isAfter($user->restricted_until)) {
                     // The restriction has run out: lift it and let the request through
                     $user->update(['is_restricted' => false, 'restriction_reason' => null, 'restricted_until' => null]);

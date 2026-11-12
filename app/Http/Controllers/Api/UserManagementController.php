@@ -194,6 +194,15 @@ class UserManagementController extends Controller
 
         // [Sec] The Super Admin account can never be archived (it would lock everyone out of management).
         if ($user->role === 'super_admin') {
+            AuditLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Blocked: Archive Super Admin',
+                'target_type' => 'users',
+                'target_id' => $user->id,
+                'details' => 'An attempt to archive the Super Admin account was blocked: ' . $user->name,
+                'performed_by' => 'Super Admin: ' . $request->user()->name,
+                'ip_address' => $request->ip(),
+            ]);
             return response()->json(['message' => 'The Super Admin account cannot be archived.'], 403);
         }
 
