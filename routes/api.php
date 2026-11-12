@@ -154,6 +154,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::post('/', [SupportController::class, 'store']);
         Route::post('/ask', [SupportController::class, 'askChatbot']);
         Route::get('/my-messages', [SupportController::class, 'myMessages']);
+        Route::get('/my-conversation', [SupportController::class, 'myConversation']);
+        Route::post('/send', [SupportController::class, 'sendFromStudent']);
 
         Route::middleware('admin.privilege:support_inbox')->group(function () {
             Route::get('/', [SupportController::class, 'index']);

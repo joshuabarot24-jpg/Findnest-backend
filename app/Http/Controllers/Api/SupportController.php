@@ -208,6 +208,71 @@ class SupportController extends Controller
         return response()->json(['items' => $items]);
     }
 
+    // Student: the whole conversation with the Guidance Office, oldest first
+    public function myConversation(Request $request)
+    {
+        $messages = SupportMessage::where('user_id', $request->user()->id)->orderBy('created_at')->get();
+        $repliesByMsg = SupportReply::whereIn('support_message_id', $messages->pluck('id'))
+            ->orderBy('created_at')->get()->groupBy('support_message_id');
+
+        $items = [];
+        foreach ($messages as $m) {
+            if ($m->message === self::STARTED_TEXT) {
+                $items[] = ['key' => 's' . $m->id, 'kind' => 'system', 'text' => self::STARTED_TEXT, 'at' => $m->created_at];
+            } else {
+                $items[] = [
+                    'key' => 'm' . $m->id, 'kind' => 'message', 'sender' => 'student',
+                    'text' => $m->message, 'at' => $m->created_at,
+                    'is_override_request' => (bool) $m->is_override_request, 'override_status' => $m->override_status,
+                ];
+            }
+            foreach ($repliesByMsg->get($m->id, collect()) as $r) {
+                $items[] = [
+                    'key' => 'r' . $r->id, 'kind' => 'reply',
+                    'sender' => $r->sender_type === 'admin' ? 'admin' : 'student',
+                    'text' => $r->message, 'at' => $r->created_at,
+                ];
+            }
+        }
+        usort($items, fn ($a, $b) => $a['at']->timestamp <=> $b['at']->timestamp);
+
+        return response()->json(['items' => $items]);
+    }
+
+    // Student: send a message to the Guidance Office. It joins the latest conversation, or starts one
+    public function sendFromStudent(Request $request)
+    {
+        $validator = Validator::make($request->all(), ['message' => 'required|string|max:1000']);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = $request->user();
+        $latest = SupportMessage::where('user_id', $user->id)->orderByDesc('created_at')->first();
+
+        if ($latest) {
+            SupportReply::create([
+                'support_message_id' => $latest->id,
+                'user_id' => $user->id,
+                'sender_type' => 'student',
+                'message' => $request->message,
+            ]);
+            $latest->update(['status' => 'new']);
+        } else {
+            SupportMessage::create([
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'message' => $request->message,
+                'status' => 'new',
+                'is_override_request' => false,
+                'override_status' => null,
+            ]);
+        }
+
+        return response()->json(['message' => 'Message sent'], 201);
+    }
+
     public function myMessages(Request $request)
     {
         $messages = SupportMessage::where('user_id', $request->user()->id)
