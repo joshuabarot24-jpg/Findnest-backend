@@ -132,9 +132,18 @@ class UserManagementController extends Controller
             return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
         }
 
-        if (in_array($request->role, ['admin', 'super_admin'], true) && $request->role !== $user->role
-            && \App\Support\StaffLimit::full($request->role, $user->id)) {
-            return response()->json(['message' => \App\Support\StaffLimit::message($request->role)], 422);
+        // The Super Admin account keeps its role
+        if ($user->role === 'super_admin' && $request->role !== 'super_admin') {
+            AuditLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Blocked: Change Super Admin Role',
+                'target_type' => 'users',
+                'target_id' => $user->id,
+                'details' => 'An attempt to change the role of the Super Admin account was blocked: ' . $user->name,
+                'performed_by' => 'Super Admin: ' . $request->user()->name,
+                'ip_address' => $request->ip(),
+            ]);
+            return response()->json(['message' => 'The Super Admin account cannot be changed to another role.'], 403);
         }
 
         // The old form sends only name. The new form sends the split names
@@ -152,7 +161,7 @@ class UserManagementController extends Controller
             'year_level' => $request->year_level,
             'education_level' => $request->education_level,
             'privileges' => $request->privileges,
-            'is_restricted' => $request->is_restricted ?? false,
+            'is_restricted' => $request->role === 'super_admin' ? false : ($request->is_restricted ?? false),
             'restriction_reason' => $request->restriction_reason,
             'restricted_until' => $request->restricted_until,
         ]);
@@ -342,6 +351,19 @@ class UserManagementController extends Controller
     public function toggleRestriction(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if ($user->role === 'super_admin') {
+            AuditLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Blocked: Restrict Super Admin',
+                'target_type' => 'users',
+                'target_id' => $user->id,
+                'details' => 'An attempt to restrict the Super Admin account was blocked: ' . $user->name,
+                'performed_by' => 'Super Admin: ' . $request->user()->name,
+                'ip_address' => $request->ip(),
+            ]);
+            return response()->json(['message' => 'The Super Admin account cannot be restricted.'], 403);
+        }
 
         $validator = Validator::make($request->all(), [
             'is_restricted' => 'required|boolean',
