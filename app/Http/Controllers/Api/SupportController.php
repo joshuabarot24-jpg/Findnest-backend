@@ -318,6 +318,34 @@ class SupportController extends Controller
         $chatbot = new \App\Services\FaqChatbotService();
         $result = $chatbot->answerQuestion($request->question);
 
+        if (!empty($result['escalate'])) {
+            $user = $request->user();
+            $text = 'Sent from the assistant: ' . trim($request->question);
+
+            // The same question is not sent twice within 5 minutes
+            $recent = SupportMessage::where('user_id', $user?->id)
+                ->where('message', $text)
+                ->where('created_at', '>=', now()->subMinutes(5))
+                ->exists();
+
+            if (!$recent) {
+                SupportMessage::create([
+                    'user_id' => $user?->id,
+                    'name' => $user?->name ?? 'Guest',
+                    'email' => $user?->email ?? 'unknown@findnest.local',
+                    'message' => $text,
+                    'status' => 'new',
+                    'is_override_request' => false,
+                    'override_status' => null,
+                ]);
+            }
+
+            return response()->json([
+                'answer' => "I couldn't answer that, so I sent your question to the Guidance Office. You will see their reply in Support and get a notification.",
+                'escalated' => true,
+            ]);
+        }
+
         return response()->json(['answer' => $result['answer']]);
     }
 }
