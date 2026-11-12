@@ -157,6 +157,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
 
         Route::middleware('admin.privilege:support_inbox')->group(function () {
             Route::get('/', [SupportController::class, 'index']);
+            Route::get('/threads', [SupportController::class, 'threads']);
+            Route::get('/{id}/conversation', [SupportController::class, 'conversation']);
             Route::post('/{id}/read', [SupportController::class, 'markAsRead']);
             Route::get('/{id}/thread', [SupportController::class, 'getThread']);
             Route::post('/{id}/reply', [SupportController::class, 'reply']);

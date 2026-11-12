@@ -120,6 +120,94 @@ class SupportController extends Controller
         return response()->json(['messages' => $messages]);
     }
 
+    private const STARTED_TEXT = 'The Guidance Office started this conversation.';
+
+    // Admin: one row per student, newest activity first. Each row has the shape of a message row,
+    // and its id is the student's latest message (the target of a reply)
+    public function threads()
+    {
+        $messages = SupportMessage::with('user:id,name,email,lrn,education_level,trust_score,profile_photo_url')
+            ->whereNotNull('user_id')
+            ->orderBy('created_at')
+            ->get();
+        $repliesByMsg = SupportReply::whereIn('support_message_id', $messages->pluck('id'))
+            ->orderBy('created_at')->get()->groupBy('support_message_id');
+
+        $rows = [];
+        foreach ($messages->groupBy('user_id') as $group) {
+            $latest = $group->last();
+            $items = [];
+            foreach ($group as $m) {
+                if ($m->message !== self::STARTED_TEXT) {
+                    $items[] = ['at' => $m->created_at, 'sender' => 'student', 'text' => $m->message];
+                }
+                foreach ($repliesByMsg->get($m->id, collect()) as $r) {
+                    $items[] = ['at' => $r->created_at, 'sender' => $r->sender_type === 'admin' ? 'admin' : 'student', 'text' => $r->message];
+                }
+            }
+            usort($items, fn ($a, $b) => $a['at']->timestamp <=> $b['at']->timestamp);
+            $last = $items ? end($items) : ['at' => $latest->created_at, 'sender' => 'admin', 'text' => $latest->message];
+
+            $unread = $group->where('status', 'new')->count();
+            $pending = $group->filter(fn ($m) => $m->is_override_request && $m->override_status === 'pending')->count();
+            $u = $latest->user;
+
+            $rows[] = [
+                'id' => $latest->id,
+                'name' => $u?->name ?? $latest->name,
+                'email' => $u?->email ?? $latest->email,
+                'message' => ($last['sender'] === 'admin' ? 'You: ' : '') . \Illuminate\Support\Str::limit($last['text'], 90),
+                'status' => $unread > 0 ? 'new' : ($last['sender'] === 'admin' ? 'responded' : 'read'),
+                'created_at' => $last['at'],
+                'is_override_request' => $pending > 0,
+                'override_status' => $pending > 0 ? 'pending' : null,
+                'user' => $u ? ['id' => $u->id, 'profile_photo_url' => $u->profile_photo_url] : null,
+                'lrn' => $u?->lrn,
+                'education_level' => $u?->education_level,
+                'trust_score' => $u?->trust_score,
+                'unread_count' => $unread,
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => $b['created_at']->timestamp <=> $a['created_at']->timestamp);
+
+        return response()->json(['messages' => $rows]);
+    }
+
+    // Admin: every message and reply of the student who owns this message, oldest first
+    public function conversation($id)
+    {
+        $anchor = SupportMessage::findOrFail($id);
+        $messages = $anchor->user_id
+            ? SupportMessage::where('user_id', $anchor->user_id)->orderBy('created_at')->get()
+            : collect([$anchor]);
+        $repliesByMsg = SupportReply::whereIn('support_message_id', $messages->pluck('id'))
+            ->orderBy('created_at')->get()->groupBy('support_message_id');
+
+        $items = [];
+        foreach ($messages as $m) {
+            if ($m->message === self::STARTED_TEXT) {
+                $items[] = ['key' => 's' . $m->id, 'kind' => 'system', 'text' => $m->message, 'at' => $m->created_at];
+            } else {
+                $items[] = [
+                    'key' => 'm' . $m->id, 'kind' => 'message', 'message_id' => $m->id, 'sender' => 'student',
+                    'text' => $m->message, 'at' => $m->created_at,
+                    'is_override_request' => (bool) $m->is_override_request, 'override_status' => $m->override_status,
+                ];
+            }
+            foreach ($repliesByMsg->get($m->id, collect()) as $r) {
+                $items[] = [
+                    'key' => 'r' . $r->id, 'kind' => 'reply',
+                    'sender' => $r->sender_type === 'admin' ? 'admin' : 'student',
+                    'text' => $r->message, 'at' => $r->created_at,
+                ];
+            }
+        }
+        usort($items, fn ($a, $b) => $a['at']->timestamp <=> $b['at']->timestamp);
+
+        return response()->json(['items' => $items]);
+    }
+
     public function myMessages(Request $request)
     {
         $messages = SupportMessage::where('user_id', $request->user()->id)
@@ -131,8 +219,13 @@ class SupportController extends Controller
     public function markAsRead($id)
     {
         $message = SupportMessage::findOrFail($id);
-        $message->update(['status' => 'read']);
-        return response()->json(['message' => 'Marked as read', 'data' => $message]);
+        // Opening a student's conversation marks all of that student's new messages as read
+        if ($message->user_id) {
+            SupportMessage::where('user_id', $message->user_id)->where('status', 'new')->update(['status' => 'read']);
+        } else {
+            $message->update(['status' => 'read']);
+        }
+        return response()->json(['message' => 'Marked as read', 'data' => $message->fresh()]);
     }
 
     public function getThread(Request $request, $id)
@@ -190,6 +283,9 @@ class SupportController extends Controller
                 'sent_at' => Carbon::now(),
             ]);
             $message->update(['status' => 'responded']);
+        }
+        if ($senderType === 'student') {
+            $message->update(['status' => 'new']);
         }
 
         return response()->json(['message' => 'Reply sent successfully', 'data' => $reply], 201);
