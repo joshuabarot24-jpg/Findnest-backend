@@ -549,6 +549,7 @@ class AuthController extends Controller
             'login_locked_until' => null,
         ]);
         $user->forceFill(['password_is_temporary' => false])->save();
+        \App\Support\TrustedDevice::forget($user);
 
         \DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 
