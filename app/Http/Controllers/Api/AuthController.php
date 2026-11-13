@@ -419,7 +419,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account not found'], 404);
         }
 
+        if ($user->login_locked_until && now()->lt($user->login_locked_until)) {
+            $wait = max(1, (int) ceil(now()->diffInSeconds($user->login_locked_until, false)));
+            return response()->json(['message' => 'Too many failed attempts. Please try again later.', 'retry_after' => $wait], 429);
+        }
+
         if ($user->otp_code !== $request->otp) {
+            \App\Support\LoginLock::fail($user);
             return response()->json(['message' => 'Invalid OTP code'], 401);
         }
 
