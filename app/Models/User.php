@@ -52,6 +52,11 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'otp_code',
+        'otp_expires_at',
+        'fcm_token',
+        'failed_login_attempts',
+        'login_locked_until',
+        'last_failed_login_at',
     ];
 
     protected $casts = [

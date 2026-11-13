@@ -147,7 +147,7 @@ class LostItemController extends Controller
 
         return response()->json([
             'message' => 'Lost item report submitted successfully',
-            'report' => $report->load('user')
+            'report' => $report->load('user:id,name,email')
         ], 201);
     }
 
