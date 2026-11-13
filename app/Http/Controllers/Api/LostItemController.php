@@ -30,7 +30,11 @@ class LostItemController extends Controller
                     $r->photo_url = $r->blurred_photo_url;
                     $r->photo_urls = [];
                     $r->makeHidden(['ai_description', 'description', 'brand_model', 'blurred_photo_url']);
-                    $r->user?->setAppends([]); 
+                    if ($r->user) {
+                        $r->user->setAppends([]);      
+                        $r->user->name = 'A student';
+                    }
+                    $r->user?->setAppends([]);
                 }
             }
         }
