@@ -142,7 +142,7 @@ class FoundItemController extends Controller
             'target_type' => 'found_item_records',
             'target_id' => $record->id,
             'details' => ($isConfiscated ? 'Admin recorded confiscated item: ' : 'Admin recorded found item: ') . $record->item_name . ($record->location_found ? ' at ' . $record->location_found : ''),
-            'performed_by' => 'Admin: ' . $request->user()->name,
+            'performed_by' => (($request->user()->role === 'student') ? 'Student: ' : 'Admin: ') . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
@@ -226,7 +226,7 @@ class FoundItemController extends Controller
             'target_type' => 'found_item_records',
             'target_id' => $id,
             'details' => 'Admin removed "' . $record->item_name . '" from active Item Management. The record is preserved for audit compliance.',
-            'performed_by' => 'Admin: ' . $request->user()->name,
+            'performed_by' => (($request->user()->role === 'student') ? 'Student: ' : 'Admin: ') . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
@@ -261,7 +261,7 @@ class FoundItemController extends Controller
             'target_type' => 'found_item_records',
             'target_id' => $record->id,
             'details' => 'Admin documented disposal of "' . $record->item_name . '": ' . $request->disposal_notes,
-            'performed_by' => 'Admin: ' . $request->user()->name,
+            'performed_by' => (($request->user()->role === 'student') ? 'Student: ' : 'Admin: ') . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
@@ -289,7 +289,7 @@ class FoundItemController extends Controller
             'target_type' => 'found_item_records',
             'target_id' => $record->id,
             'details' => 'Admin confirmed physical receipt of "' . $record->item_name . '", AI matching now active',
-            'performed_by' => 'Admin: ' . $request->user()->name,
+            'performed_by' => (($request->user()->role === 'student') ? 'Student: ' : 'Admin: ') . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
 
