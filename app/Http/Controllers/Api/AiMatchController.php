@@ -29,6 +29,11 @@ class AiMatchController extends Controller
 
     public function show($id)
     {
+        // Only staff can open or decide a match. A student uses the reveal route for their own match
+        if (!in_array(request()->user()->role, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $match = AiMatch::with([
             'lostReport.user',
             'foundRecord',
@@ -142,6 +147,11 @@ class AiMatchController extends Controller
 
     public function confirm(Request $request, $id)
     {
+        // Only staff can open or decide a match. A student uses the reveal route for their own match
+        if (!in_array(request()->user()->role, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $match = AiMatch::findOrFail($id);
         $match->update(['match_status' => 'confirmed']);
 
@@ -160,6 +170,11 @@ class AiMatchController extends Controller
 
     public function reject(Request $request, $id)
     {
+        // Only staff can open or decide a match. A student uses the reveal route for their own match
+        if (!in_array(request()->user()->role, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $match = AiMatch::findOrFail($id);
         $match->update(['match_status' => 'rejected']);
         (new \App\Services\MatchScoreService())->releaseNextMatchForUser($match->lostReport->user_id);
