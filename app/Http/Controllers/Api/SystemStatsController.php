@@ -140,19 +140,9 @@ class SystemStatsController extends Controller
 
     public function downloadBackup(Request $request, $filename)
     {
-        $token = $request->query('token');
-        if (!$token) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid or expired token'], 401);
-        }
-
-        $user = $accessToken->tokenable;
-        if (!$user || $user->role !== 'super_admin') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        // The route already needs a login and the Super Admin role. Only a plain file name is allowed
+        if ($filename !== basename($filename) || !preg_match('/^[A-Za-z0-9._-]+$/', $filename)) {
+            return response()->json(['message' => 'Invalid file name.'], 422);
         }
 
         $path = 'backups/' . $filename;
