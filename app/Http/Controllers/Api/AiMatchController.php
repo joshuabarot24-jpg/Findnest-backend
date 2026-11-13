@@ -16,6 +16,11 @@ class AiMatchController extends Controller
 {
     public function index()
     {
+        // Staff only
+        if (!in_array(request()->user()->role, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $matches = AiMatch::with([
             'lostReport.user',
             'foundRecord',
@@ -72,6 +77,11 @@ class AiMatchController extends Controller
 
     public function store(Request $request)
     {
+        // Staff only
+        if (!in_array(request()->user()->role, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'report_id' => 'required|exists:lost_item_reports,id',
             'found_id' => 'required|exists:found_item_records,id',

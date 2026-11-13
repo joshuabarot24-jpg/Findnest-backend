@@ -61,22 +61,22 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::delete('/{id}', [LostItemController::class, 'destroy']);
     });
 
-    Route::prefix('inventory')->middleware('admin.privilege:item_management')->group(function () {
+    Route::prefix('inventory')->middleware(['role:admin,super_admin', 'admin.privilege:item_management'])->group(function () {
         Route::get('/', [InventoryController::class, 'index']);
         Route::post('/', [InventoryController::class, 'store']);
         Route::put('/{id}', [InventoryController::class, 'update']);
         Route::delete('/{id}', [InventoryController::class, 'destroy']);
     });
 
-    Route::prefix('found-items')->middleware('admin.privilege:item_management')->group(function () {
-        Route::get('/', [FoundItemController::class, 'index']);
-        Route::post('/', [FoundItemController::class, 'store']);
-        Route::get('/students/search', [SupportController::class, 'searchStudents']);
-        Route::get('/{id}', [FoundItemController::class, 'show']);
-        Route::put('/{id}', [FoundItemController::class, 'update']);
-        Route::delete('/{id}', [FoundItemController::class, 'destroy']);
-        Route::post('/{id}/document-disposal', [FoundItemController::class, 'documentDisposal']);
-        Route::post('/{id}/confirm-receipt', [FoundItemController::class, 'confirmReceipt']);
+    Route::prefix('found-items')->group(function () {
+        Route::get('/', [FoundItemController::class, 'index'])->middleware('admin.privilege:item_management');
+        Route::post('/', [FoundItemController::class, 'store'])->middleware('admin.privilege:item_management');
+        Route::get('/students/search', [SupportController::class, 'searchStudents'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
+        Route::get('/{id}', [FoundItemController::class, 'show'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
+        Route::put('/{id}', [FoundItemController::class, 'update'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
+        Route::delete('/{id}', [FoundItemController::class, 'destroy'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
+        Route::post('/{id}/document-disposal', [FoundItemController::class, 'documentDisposal'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
+        Route::post('/{id}/confirm-receipt', [FoundItemController::class, 'confirmReceipt'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
     });
 
     Route::prefix('claims')->group(function () {
@@ -86,7 +86,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::post('/{id}/answers', [ClaimController::class, 'submitAnswers']);
         Route::post('/{id}/appeal', [ClaimController::class, 'submitAppeal']);
 
-        Route::middleware('admin.privilege:claim_verification')->group(function () {
+        Route::middleware(['role:admin,super_admin', 'admin.privilege:claim_verification'])->group(function () {
             Route::get('/', [ClaimController::class, 'index']);
             Route::post('/{id}/approve', [ClaimController::class, 'approve']);
             Route::post('/{id}/reject', [ClaimController::class, 'reject']);
@@ -104,23 +104,23 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
     });
 
-    Route::prefix('audit-logs')->middleware('admin.privilege:digital_records')->group(function () {
+    Route::prefix('audit-logs')->middleware(['role:admin,super_admin', 'admin.privilege:digital_records'])->group(function () {
         Route::get('/', [AuditLogController::class, 'index']);
         Route::get('/action-types', [AuditLogController::class, 'actionTypes']);
         Route::get('/{type}/{id}', [AuditLogController::class, 'byCase']);
     });
 
     Route::prefix('ai-matches')->group(function () {
-        Route::get('/', [AiMatchController::class, 'index']);
+        Route::get('/', [AiMatchController::class, 'index'])->middleware('role:admin,super_admin');
         Route::get('/my-matches', [AiMatchController::class, 'myMatches']);
-        Route::get('/{id}', [AiMatchController::class, 'show']);
-        Route::post('/', [AiMatchController::class, 'store']);
-        Route::post('/{id}/confirm', [AiMatchController::class, 'confirm']);
-        Route::post('/{id}/reject', [AiMatchController::class, 'reject']);
+        Route::get('/{id}', [AiMatchController::class, 'show'])->middleware('role:admin,super_admin');
+        Route::post('/', [AiMatchController::class, 'store'])->middleware('role:admin,super_admin');
+        Route::post('/{id}/confirm', [AiMatchController::class, 'confirm'])->middleware('role:admin,super_admin');
+        Route::post('/{id}/reject', [AiMatchController::class, 'reject'])->middleware('role:admin,super_admin');
         Route::get('/{id}/reveal', [AiMatchController::class, 'myMatchedItem']);
     });
 
-    Route::prefix('locations')->middleware('admin.privilege:location_analytics')->group(function () {
+    Route::prefix('locations')->middleware(['role:admin,super_admin', 'admin.privilege:location_analytics'])->group(function () {
         Route::get('/', [LocationController::class, 'index']);
         Route::get('/hotspots', [LocationController::class, 'hotspots']);
         Route::post('/', [LocationController::class, 'store']);
@@ -135,20 +135,20 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
     });
 
     Route::prefix('users')->group(function () {
-        Route::get('/', [UserManagementController::class, 'index']);
-        Route::post('/', [UserManagementController::class, 'store']);
-        Route::put('/{id}', [UserManagementController::class, 'update']);
+        Route::get('/', [UserManagementController::class, 'index'])->middleware('role:admin,super_admin');
+        Route::post('/', [UserManagementController::class, 'store'])->middleware('role:super_admin');
+        Route::put('/{id}', [UserManagementController::class, 'update'])->middleware('role:super_admin');
                 // [Sec] Accounts are archived (revoke route = archive) and can be restored with a new password; deleting is not allowed.
-        Route::post('/{id}/revoke', [UserManagementController::class, 'revoke']);
-        Route::post('/{id}/restore', [UserManagementController::class, 'restore']);
-        Route::post('/{id}/approve-password-change', [UserManagementController::class, 'approvePasswordChange']);
-        Route::post('/{id}/toggle-restriction', [UserManagementController::class, 'toggleRestriction']);
-        Route::post('/{id}/toggle-manual-override', [UserManagementController::class, 'toggleManualOverride']);
-        Route::get('/{id}/activity', [UserManagementController::class, 'activity']);
+        Route::post('/{id}/revoke', [UserManagementController::class, 'revoke'])->middleware('role:super_admin');
+        Route::post('/{id}/restore', [UserManagementController::class, 'restore'])->middleware('role:super_admin');
+        Route::post('/{id}/approve-password-change', [UserManagementController::class, 'approvePasswordChange'])->middleware('role:super_admin');
+        Route::post('/{id}/toggle-restriction', [UserManagementController::class, 'toggleRestriction'])->middleware('role:super_admin');
+        Route::post('/{id}/toggle-manual-override', [UserManagementController::class, 'toggleManualOverride'])->middleware('role:admin,super_admin');
+        Route::get('/{id}/activity', [UserManagementController::class, 'activity'])->middleware('role:admin,super_admin');
 
     });
 
-    Route::prefix('case-trail')->middleware('admin.privilege:digital_records')->group(function () {
+    Route::prefix('case-trail')->middleware(['role:admin,super_admin', 'admin.privilege:digital_records'])->group(function () {
         Route::get('/', [CaseTrailController::class, 'index']);
         Route::get('/{id}', [CaseTrailController::class, 'show']);
     });
@@ -160,7 +160,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::get('/my-conversation', [SupportController::class, 'myConversation']);
         Route::post('/send', [SupportController::class, 'sendFromStudent']);
 
-        Route::middleware('admin.privilege:support_inbox')->group(function () {
+        Route::middleware(['role:admin,super_admin', 'admin.privilege:support_inbox'])->group(function () {
             Route::get('/', [SupportController::class, 'index']);
             Route::get('/threads', [SupportController::class, 'threads']);
             Route::get('/{id}/conversation', [SupportController::class, 'conversation']);
@@ -174,20 +174,21 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
     });
 
     Route::post('/fcm/update-token', [FcmController::class, 'updateToken']);
-    Route::get('/system-stats', [SystemStatsController::class, 'index']);
-    Route::get('/system-settings', [SystemStatsController::class, 'getSettings']);
-    Route::put('/system-settings', [SystemStatsController::class, 'updateSettings']);
-    Route::post('/system/backup', [SystemStatsController::class, 'backupNow']);
-    Route::get('/system/backups', [SystemStatsController::class, 'listBackups']);
+    Route::get('/system-stats', [SystemStatsController::class, 'index'])->middleware('role:admin,super_admin');
+    Route::get('/system-settings', [SystemStatsController::class, 'getSettings'])->middleware('role:admin,super_admin');
+    Route::put('/system-settings', [SystemStatsController::class, 'updateSettings'])->middleware('role:super_admin');
+    Route::post('/system/backup', [SystemStatsController::class, 'backupNow'])->middleware('role:super_admin');
+    Route::get('/system/backups', [SystemStatsController::class, 'listBackups'])->middleware('role:super_admin');
     Route::get('/system/maintenance-mode', [SystemStatsController::class, 'getMaintenanceMode']);
-    Route::post('/system/maintenance-mode', [SystemStatsController::class, 'toggleMaintenanceMode']);
-    Route::get('/system/pending-cleanup', [SystemStatsController::class, 'checkPendingCleanup']);
-    Route::post('/system/confirm-cleanup', [SystemStatsController::class, 'confirmCleanup']);
-    Route::post('/system/import-backup-preview', [SystemStatsController::class, 'importBackupPreview']);
-    Route::post('/system/bump-version', [SystemStatsController::class, 'bumpVersion']);
-    Route::get('/system/trust-settings', [SystemStatsController::class, 'getTrustSettings']);
-    Route::put('/system/trust-settings', [SystemStatsController::class, 'updateTrustSettings']);
+    Route::post('/system/maintenance-mode', [SystemStatsController::class, 'toggleMaintenanceMode'])->middleware('role:super_admin');
+    Route::get('/system/pending-cleanup', [SystemStatsController::class, 'checkPendingCleanup'])->middleware('role:admin,super_admin');
+    Route::post('/system/confirm-cleanup', [SystemStatsController::class, 'confirmCleanup'])->middleware('role:super_admin');
+    Route::post('/system/import-backup-preview', [SystemStatsController::class, 'importBackupPreview'])->middleware('role:super_admin');
+    Route::post('/system/bump-version', [SystemStatsController::class, 'bumpVersion'])->middleware('role:super_admin');
+    Route::get('/system/trust-settings', [SystemStatsController::class, 'getTrustSettings'])->middleware('role:admin,super_admin');
+    Route::put('/system/trust-settings', [SystemStatsController::class, 'updateTrustSettings'])->middleware('role:super_admin');
 
 });
 
-    Route::get('/system/backups/{filename}', [SystemStatsController::class, 'downloadBackup']);
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::class, 'role:super_admin'])
+        ->get('/system/backups/{filename}', [SystemStatsController::class, 'downloadBackup']);

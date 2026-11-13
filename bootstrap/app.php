@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'admin.privilege' => \App\Http\Middleware\CheckAdminPrivilege::class,
+            'role' => \App\Http\Middleware\EnsureRole::class,
         ]);
 
     })
