@@ -5,7 +5,7 @@ namespace App\Support;
 // REMOVE when the demo accounts are deleted: these two accounts skip the email code at login
 class DemoAccounts
 {
-    private const OTP_EXEMPT = ['superadmin@findnest.com', 'admin@findnest.com', 'student1@findnest.com', 'student2@findnest.com'];
+    private const OTP_EXEMPT = ['superadmin@findnest.com', 'admin@findnest.com', 'student@findnest.com', 'student2@findnest.com'];
 
     public static function skipsOtp(string $email): bool
     {
