@@ -35,4 +35,6 @@ return [
         ],
     ],
 
+    'firebase_b64' => env('FIREBASE_CREDENTIALS_B64'),
+
 ];

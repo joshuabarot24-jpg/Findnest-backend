@@ -15,13 +15,18 @@ class FcmService
             return $this->messaging;
         }
 
-        $path = config('firebase.projects.' . config('firebase.default') . '.credentials')
-            ?: env('FIREBASE_CREDENTIALS');
-        if (!str_starts_with($path, '/')) {
-            $path = base_path($path);
+        $b64 = config('services.firebase_b64');
+        if ($b64) {
+            $credentials = json_decode(base64_decode($b64), true);
+        } else {
+            $credentials = config('firebase.projects.' . config('firebase.default') . '.credentials')
+                ?: env('FIREBASE_CREDENTIALS');
+            if (!str_starts_with($credentials, '/')) {
+                $credentials = base_path($credentials);
+            }
         }
 
-        $this->messaging = (new Factory)->withServiceAccount($path)->createMessaging();
+        $this->messaging = (new Factory)->withServiceAccount($credentials)->createMessaging();
         return $this->messaging;
     }
 
