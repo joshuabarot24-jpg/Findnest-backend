@@ -348,6 +348,16 @@ class SupportController extends Controller
                 'sent_at' => Carbon::now(),
             ]);
             $message->update(['status' => 'responded']);
+
+            $studentUser = \App\Models\User::find($message->user_id);
+            if ($studentUser && $studentUser->fcm_token) {
+                (new \App\Services\FcmService())->sendToUser(
+                    $studentUser->fcm_token,
+                    'New Reply from Support',
+                    'The Guidance Office replied to your support message.',
+                    ['type' => 'support']
+                );
+            }
         }
         if ($senderType === 'student') {
             $message->update(['status' => 'new']);
