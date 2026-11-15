@@ -15,7 +15,8 @@ class FcmService
             return $this->messaging;
         }
 
-        $path = env('FIREBASE_CREDENTIALS');
+        $path = config('firebase.projects.' . config('firebase.default') . '.credentials')
+            ?: env('FIREBASE_CREDENTIALS');
         if (!str_starts_with($path, '/')) {
             $path = base_path($path);
         }
