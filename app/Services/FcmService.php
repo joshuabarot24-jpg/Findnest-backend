@@ -7,12 +7,21 @@ use Kreait\Firebase\Messaging\Notification;
 
 class FcmService
 {
-    protected $messaging;
+    protected $messaging = null;
 
-    public function __construct()
+    protected function messaging()
     {
-        $factory = (new Factory)->withServiceAccount(base_path(env('FIREBASE_CREDENTIALS')));
-        $this->messaging = $factory->createMessaging();
+        if ($this->messaging) {
+            return $this->messaging;
+        }
+
+        $path = env('FIREBASE_CREDENTIALS');
+        if (!str_starts_with($path, '/')) {
+            $path = base_path($path);
+        }
+
+        $this->messaging = (new Factory)->withServiceAccount($path)->createMessaging();
+        return $this->messaging;
     }
 
     public function sendToUser(string $fcmToken, string $title, string $body, array $data = []): void
@@ -23,8 +32,8 @@ class FcmService
                 ->withNotification(Notification::create($title, $body))
                 ->withData($data);
 
-            $this->messaging->send($message);
-        } catch (\Exception $e) {
+            $this->messaging()->send($message);
+        } catch (\Throwable $e) {
             \Log::error('FCM Error: ' . $e->getMessage());
         }
     }
