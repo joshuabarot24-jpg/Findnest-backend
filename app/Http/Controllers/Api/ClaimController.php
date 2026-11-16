@@ -519,6 +519,9 @@ class ClaimController extends Controller
                 'is_read' => false,
                 'sent_at' => Carbon::now(),
             ]);
+            if ($student && $student->fcm_token) {
+                (new FcmService())->sendToUser($student->fcm_token, 'Appeal Approved!', 'Your appeal was approved. Visit the Guidance Office to collect your item.', ['type' => 'status']);
+            }
         } else {
             $claim->update([
                 'appeal_status' => 'resolved',
@@ -553,6 +556,9 @@ class ClaimController extends Controller
                 'is_read' => false,
                 'sent_at' => Carbon::now(),
             ]);
+            if ($student && $student->fcm_token) {
+                (new FcmService())->sendToUser($student->fcm_token, 'Appeal Reviewed', 'Your appeal was reviewed by the Guidance Office. The original rejection has been upheld.', ['type' => 'status']);
+            }
         }
 
         AuditLog::create([
