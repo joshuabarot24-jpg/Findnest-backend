@@ -15,7 +15,7 @@ class FcmService
             return $this->messaging;
         }
 
-        $b64 = config('services.firebase_b64');
+        $b64 = config('services.firebase_b64') ?: getenv('FIREBASE_CREDENTIALS_B64') ?: ($_SERVER['FIREBASE_CREDENTIALS_B64'] ?? null);
         if ($b64) {
             $credentials = json_decode(base64_decode($b64), true);
         } else {
