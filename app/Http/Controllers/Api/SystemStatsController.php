@@ -84,7 +84,6 @@ class SystemStatsController extends Controller
     {
         $backup = [
             'backup_created_at' => now()->toIso8601String(),
-            'users' => User::all()->toArray(),
             'lost_item_reports' => LostItemReport::all()->toArray(),
             'found_item_records' => FoundItemRecord::all()->toArray(),
             'ai_matches' => AiMatch::all()->toArray(),
@@ -115,7 +114,6 @@ class SystemStatsController extends Controller
             'filename' => $filename,
             'created_at' => now()->toIso8601String(),
             'record_count' => [
-                'users' => count($backup['users']),
                 'lost_item_reports' => count($backup['lost_item_reports']),
                 'found_item_records' => count($backup['found_item_records']),
                 'ai_matches' => count($backup['ai_matches']),

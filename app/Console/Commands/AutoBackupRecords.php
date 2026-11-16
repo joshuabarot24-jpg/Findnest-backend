@@ -2,7 +2,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\User;
 use App\Models\LostItemReport;
 use App\Models\FoundItemRecord;
 use App\Models\AiMatch;
@@ -31,7 +30,6 @@ class AutoBackupRecords extends Command
         $backup = [
             'backup_created_at' => now()->toIso8601String(),
             'backup_type' => 'automatic',
-            'users' => User::all()->toArray(),
             'lost_item_reports' => LostItemReport::all()->toArray(),
             'found_item_records' => FoundItemRecord::all()->toArray(),
             'ai_matches' => AiMatch::all()->toArray(),
