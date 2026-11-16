@@ -9,7 +9,7 @@ class FcmController extends Controller
     public function updateToken(Request $request)
     {
         $request->validate([
-            'fcm_token' => 'required|string',
+            'fcm_token' => 'present|nullable|string',
         ]);
 
         $request->user()->update([
