@@ -46,6 +46,7 @@ class ContentModerationService
                 . '"graphic_violence": true for gore, blood or injury. '
                 . '"body_part_only": true ONLY if the image shows a bare body part (for example just a foot, hand or torso with nothing worn) and there is no clothing, accessory, bag, shoes or other item on it that could be the item being reported. A selfie or photo of a person WEARING clothing, a uniform, a jacket, shoes, a cap, glasses, a bag or any accessory is NOT a body part only image, because the worn item is the item being reported, so this must be false. '
                 . '"illegal_drugs": true if illegal drugs are visible. '
+                . '"intimate_apparel": true if the main item is underwear or intimate apparel, such as a bra, panties, briefs, boxer shorts, a thong or lingerie, whether worn or on its own. Regular clothing (shirts, jackets, shorts, pants, socks, uniforms, swimwear) is false. '
                 . '"mannequin_or_display_figure": true ONLY if the main subject is a bare shop mannequin, display dummy, bust or large statue with NO clothing, bag or accessory worn on it that could be the item being reported. If a mannequin is wearing clothes, a bag, a hat, shoes or accessories, the clothing or accessory is the item and this must be false. A doll, stuffed toy, action figure or small toy is a normal item and must be false for this field. '
                 . '"appropriate": false if any of the nudity, weapon, violence, body part only, illegal drugs or obscene gesture fields is true, otherwise true. '
                 . '"appropriate_reason": a brief explanation if appropriate is false, or an empty string. '
@@ -54,7 +55,7 @@ class ContentModerationService
                 . '"quality_ok": false only for genuinely unusable photos: severe motion blur where the subject is unrecognizable, extreme darkness where nothing is visible, or such low resolution that the image is only a blur of pixels. A normal phone photo in average indoor lighting, slightly soft or off-center, must pass. '
                 . '"quality_reason": the specific quality problem if quality_ok is false, or an empty string. '
                 . 'Respond with ONLY a JSON object with exactly these fields: '
-                . '{"person_visible": true or false, "hand_gesture": "none" or "neutral" or "obscene", "nudity_or_suggestive": true or false, "weapon_brandished": true or false, "graphic_violence": true or false, "body_part_only": true or false, "illegal_drugs": true or false, "mannequin_or_display_figure": true or false, "appropriate": true or false, "appropriate_reason": "", "prohibited": true or false, "prohibited_item": "", "quality_ok": true or false, "quality_reason": ""}';
+                . '{"person_visible": true or false, "hand_gesture": "none" or "neutral" or "obscene", "nudity_or_suggestive": true or false, "weapon_brandished": true or false, "graphic_violence": true or false, "body_part_only": true or false, "illegal_drugs": true or false, "intimate_apparel": true or false, "mannequin_or_display_figure": true or false, "appropriate": true or false, "appropriate_reason": "", "prohibited": true or false, "prohibited_item": "", "quality_ok": true or false, "quality_reason": ""}';
 
             $response = Http::timeout(25)->retry(2, 1000)->post($this->apiUrl . '?key=' . $this->apiKey, [
                 'contents' => [
@@ -121,6 +122,9 @@ class ContentModerationService
             }
             if (($result['illegal_drugs'] ?? false) === true) {
                 $found[] = 'illegal drugs';
+            }
+            if (($result['intimate_apparel'] ?? false) === true) {
+                $found[] = 'underwear or intimate apparel';
             }
 
             // Always rejected, even for confiscated items
