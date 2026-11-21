@@ -102,6 +102,23 @@ class ClaimController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $logs = AuditLog::where('target_type', 'claims')
+            ->whereIn('target_id', $claims->pluck('id'))
+            ->whereIn('action', ['Ownership Questions Answered', 'Claim Approved', 'Claim Rejected', 'Claim Appeal Submitted'])
+            ->orderBy('created_at')
+            ->get(['target_id', 'action', 'created_at'])
+            ->groupBy('target_id');
+
+        /** @var Claim $claim */
+        foreach ($claims as $claim) {
+            $claim->setAttribute(
+                'timeline',
+                ($logs[$claim->id] ?? collect())
+                    ->map(fn ($l) => ['action' => $l->action, 'at' => $l->created_at])
+                    ->values()
+            );
+        }
+
         return response()->json(['claims' => $claims]);
     }
 
