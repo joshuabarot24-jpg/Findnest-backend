@@ -44,7 +44,33 @@ class FoundItemController extends Controller
 
         $records = $query->get();
 
+        if ($request->user()->role === 'student') {
+            $this->attachProgress($records);
+        }
+
         return response()->json(['records' => $records]);
+    }
+
+    private function attachProgress($records): void
+    {
+        $matches = \App\Models\AiMatch::with('claim')
+            ->whereIn('found_id', $records->pluck('id'))
+            ->whereIn('match_status', ['pending', 'confirmed'])
+            ->get()
+            ->groupBy('found_id');
+
+        /** @var FoundItemRecord $record */
+        foreach ($records as $record) {
+            $recordMatches = $matches[$record->id] ?? collect();
+            $claim = $recordMatches->pluck('claim')->filter()->sortByDesc('id')->first();
+
+            $record->setAttribute('progress', [
+                'matched_at' => $recordMatches->sortBy('matched_at')->first()?->matched_at,
+                'claim_status' => $claim?->claim_status,
+                'claimed_at' => $claim?->claimed_at,
+                'collected_at' => $claim?->collected_at,
+            ]);
+        }
     }
 
     public function store(Request $request)
