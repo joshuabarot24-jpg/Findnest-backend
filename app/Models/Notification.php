@@ -15,10 +15,48 @@ class Notification extends Model
         'sent_at',
     ];
 
+    protected $appends = ['report_type'];
+
     protected $casts = [
         'is_read' => 'boolean',
         'sent_at' => 'datetime',
     ];
+
+    public function getReportTypeAttribute(): ?string
+    {
+        $found = [
+            'Found Item Report Submitted',
+            'Item Surrendered',
+            'Item Returned to Owner',
+            'Found Item Report Expired',
+        ];
+
+        $lost = [
+            'Lost Item Report Submitted',
+            'AI Match Found!',
+            'Possible Match Found!',
+            'Claim Submitted',
+            'Claim Under Review',
+            'Claim Approved!',
+            'Claim Rejected',
+            'Appeal Submitted',
+            'Appeal Approved!',
+            'Appeal Reviewed',
+            'Item Collected',
+            'Pickup Reminder',
+            'Claim Abandoned',
+        ];
+
+        if (in_array($this->title, $found, true)) {
+            return 'found';
+        }
+
+        if (in_array($this->title, $lost, true)) {
+            return 'lost';
+        }
+
+        return null;
+    }
 
     public function user()
     {
