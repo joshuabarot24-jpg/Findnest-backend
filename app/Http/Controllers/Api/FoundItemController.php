@@ -146,6 +146,14 @@ class FoundItemController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        if ($isStudent && !$isConfiscated) {
+            \App\Services\StudentNotifier::send(
+                $request->user()->id,
+                'Found Item Report Submitted',
+                'We received your report for "' . $record->item_name . '". Please hand the item to the Guidance Office within 2 school days so matching can begin.'
+            );
+        }
+
         if ($record->receipt_confirmed && !$isConfiscated) {
             \App\Jobs\RunFoundRecordMatching::dispatch($record->id);
         }
@@ -294,6 +302,15 @@ class FoundItemController extends Controller
         ]);
 
         \App\Jobs\RunFoundRecordMatching::dispatch($record->id);
+
+        $finder = \App\Models\User::find($record->admin_id);
+        if ($finder && $finder->role === 'student') {
+            \App\Services\StudentNotifier::send(
+                $finder->id,
+                'Item Surrendered',
+                'The Guidance Office confirmed receipt of "' . $record->item_name . '". Thank you for turning it in! AI matching has started to look for its owner.'
+            );
+        }
 
         return response()->json(['message' => 'Receipt confirmed, item is now active and matched against lost reports.', 'record' => $record]);
     }

@@ -160,6 +160,14 @@ class ClaimController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        \App\Services\StudentNotifier::send(
+            $claim->student_id,
+            'Claim Submitted',
+            'We received your claim. Please answer the verification questions so the Guidance Office can review it.',
+            'status',
+            $claim->match_id
+        );
+
         // The photo score can wait in the queue
         \App\Jobs\RunClaimPostProcessing::dispatch($claim->id);
 
@@ -203,6 +211,23 @@ class ClaimController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        \App\Services\StudentNotifier::send(
+            $claim->student_id,
+            'Item Collected',
+            'Your item was marked as collected at the Guidance Office. Your report is now complete.',
+            'status',
+            $claim->match_id
+        );
+
+        $finderId = $claim->match?->foundRecord?->admin_id;
+        if ($finderId && \App\Models\User::where('id', $finderId)->where('role', 'student')->exists()) {
+            \App\Services\StudentNotifier::send(
+                $finderId,
+                'Item Returned to Owner',
+                'The item you found, "' . ($claim->match?->foundRecord?->item_name ?? 'your found item') . '", was returned to its owner. Thank you for helping!'
+            );
+        }
+
         return response()->json(['message' => 'Item marked as collected', 'claim' => $claim]);
         }
 
@@ -238,6 +263,14 @@ class ClaimController extends Controller
             'performed_by' => 'Student: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
+
+        \App\Services\StudentNotifier::send(
+            $claim->student_id,
+            'Appeal Submitted',
+            'Your appeal was received. The Guidance Office will review it and notify you of the decision.',
+            'status',
+            $claim->match_id
+        );
 
         return response()->json(['message' => 'Appeal submitted for review by the Guidance Office', 'claim' => $claim]);
     }
@@ -305,6 +338,14 @@ class ClaimController extends Controller
         }
 
         $passed = $totalCount > 0 && $correctCount >= 2;
+
+        \App\Services\StudentNotifier::send(
+            $request->user()->id,
+            'Claim Under Review',
+            'Your answers were received. The Guidance Office is now reviewing your claim and all of its evidence.',
+            'status',
+            $claim->match_id
+        );
 
         if (!$passed && $totalCount > 0) {
             $trustService = new TrustScoreService();

@@ -31,7 +31,7 @@ class LostItemController extends Controller
                     $r->photo_urls = [];
                     $r->makeHidden(['ai_description', 'description', 'brand_model', 'blurred_photo_url']);
                     if ($r->user) {
-                        $r->user->setAppends([]);      
+                        $r->user->setAppends([]);
                         $r->user->name = 'A student';
                     }
                     $r->user?->setAppends([]);
@@ -147,6 +147,12 @@ class LostItemController extends Controller
             'performed_by' => 'Student: ' . $request->user()->name,
             'ip_address' => $request->ip(),
         ]);
+
+        \App\Services\StudentNotifier::send(
+            $report->user_id,
+            'Lost Item Report Submitted',
+            'We received your report for "' . $report->item_name . '". The AI is now searching for possible matches and we will notify you if one is found.'
+        );
 
         \App\Jobs\RunLostReportMatching::dispatch($report->id);
 
