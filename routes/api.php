@@ -70,6 +70,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
 
     Route::prefix('found-items')->group(function () {
         Route::get('/', [FoundItemController::class, 'index'])->middleware('admin.privilege:item_management');
+        Route::get('/mine', [FoundItemController::class, 'mine']);
         Route::post('/', [FoundItemController::class, 'store'])->middleware('admin.privilege:item_management');
         Route::get('/students/search', [SupportController::class, 'searchStudents'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
         Route::get('/{id}', [FoundItemController::class, 'show'])->middleware(['role:admin,super_admin', 'admin.privilege:item_management']);
@@ -138,7 +139,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountIsActive::c
         Route::get('/', [UserManagementController::class, 'index'])->middleware('role:admin,super_admin');
         Route::post('/', [UserManagementController::class, 'store'])->middleware('role:super_admin');
         Route::put('/{id}', [UserManagementController::class, 'update'])->middleware('role:super_admin');
-                // [Sec] Accounts are archived (revoke route = archive) and can be restored with a new password; deleting is not allowed.
+        // [Sec] Accounts are archived (revoke route = archive) and can be restored with a new password; deleting is not allowed.
         Route::post('/{id}/revoke', [UserManagementController::class, 'revoke'])->middleware('role:super_admin');
         Route::post('/{id}/restore', [UserManagementController::class, 'restore'])->middleware('role:super_admin');
         Route::post('/{id}/approve-password-change', [UserManagementController::class, 'approvePasswordChange'])->middleware('role:super_admin');

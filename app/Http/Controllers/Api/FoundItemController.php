@@ -51,6 +51,17 @@ class FoundItemController extends Controller
         return response()->json(['records' => $records]);
     }
 
+    public function mine(Request $request)
+    {
+        $records = FoundItemRecord::where('admin_id', $request->user()->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $this->attachProgress($records);
+
+        return response()->json(['records' => $records]);
+    }
+
     private function attachProgress($records): void
     {
         $matches = \App\Models\AiMatch::with('claim')
