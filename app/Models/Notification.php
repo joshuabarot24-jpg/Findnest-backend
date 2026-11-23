@@ -29,6 +29,8 @@ class Notification extends Model
             'Item Surrendered',
             'Item Returned to Owner',
             'Found Item Report Expired',
+            'Your Found Item May Have an Owner',
+            'Your Found Item Was Claimed',
         ];
 
         $lost = [

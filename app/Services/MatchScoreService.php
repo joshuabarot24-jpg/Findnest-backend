@@ -244,7 +244,7 @@ class MatchScoreService
                 if ($found->admin_id && \App\Models\User::where('id', $found->admin_id)->where('role', 'student')->exists()) {
                     \App\Services\StudentNotifier::send(
                         $found->admin_id,
-                        'Possible Match Found',
+                        'Your Found Item May Have an Owner',
                         'The item you found, "' . ($found->item_name ?? 'your found item') . '", may belong to someone who reported it lost. The Guidance Office will verify it.',
                         'status',
                         $match->id
