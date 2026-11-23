@@ -239,6 +239,17 @@ class MatchScoreService
 
             if ($finalScore >= 75) {
                 $this->notifyStudent($report, $found, $finalScore, $match->id);
+
+                // Also tell the student who found the item (no owner details shared)
+                if ($found->admin_id && \App\Models\User::where('id', $found->admin_id)->where('role', 'student')->exists()) {
+                    \App\Services\StudentNotifier::send(
+                        $found->admin_id,
+                        'Possible Match Found',
+                        'The item you found, "' . ($found->item_name ?? 'your found item') . '", may belong to someone who reported it lost. The Guidance Office will verify it.',
+                        'status',
+                        $match->id
+                    );
+                }
             }
         }
     }

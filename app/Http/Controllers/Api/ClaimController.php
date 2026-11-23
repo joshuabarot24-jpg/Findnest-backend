@@ -185,6 +185,18 @@ class ClaimController extends Controller
             $claim->match_id
         );
 
+                // Tell the student who found the item that someone claimed it (no claimant details shared)
+        $foundFinderId = $claim->match?->foundRecord?->admin_id;
+        if ($foundFinderId && \App\Models\User::where('id', $foundFinderId)->where('role', 'student')->exists()) {
+            \App\Services\StudentNotifier::send(
+                $foundFinderId,
+                'Your Found Item Was Claimed',
+                'Someone submitted a claim for "' . ($claim->match?->foundRecord?->item_name ?? 'the item you found') . '". The Guidance Office is now verifying it.',
+                'status',
+                $claim->match_id
+            );
+        }
+
         // The photo score can wait in the queue
         \App\Jobs\RunClaimPostProcessing::dispatch($claim->id);
 
